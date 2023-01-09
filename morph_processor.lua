@@ -4,10 +4,10 @@ ardour {
   category    = "Utility",
   license     = "MIT",
   author      = "RR",
-  description = [[generalized Morph for controlling multiple automation lanes.  This processor contains multiple lanes and needs to be coupled with the Session Script morph_lane_linker.lua]]
+  description = [[generalized Morph for controlling multiple automation lanes.  This processor contains multiple lanes and needs to be coupled with the Session Script morph_lane_linker.lua as well as Morph Locator plugins.]]
 }
 
-MAX_TARGETS = 4
+MAX_TARGETS = 8
 
 function dsp_ioconfig()
   return {
@@ -32,9 +32,9 @@ function dsp_params()
     table.insert(output, { ["type"] = "input", name = "target" .. i .. "_control7", min = -99999, max = 99999, default = 0 })
     table.insert(output, { ["type"] = "input", name = "target" .. i .. "_control8", min = -99999, max = 99999, default = 0 })
     table.insert(output, { ["type"] = "input", name = "target" .. i .. "_control9", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_plugin_id", min = -1, max = 9999999, default = -1, integer = true })
-    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_nth_param", min = -1, max = 9999999, default = -1, integer = true })
-    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_enabled", min = 0, max = 1, default = 0, integer = true })
+    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_plugin_id", min = -1, max = 128, default = -1, integer = true })
+    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_nth_param", min = -1, max = 4096, default = -1, integer = true })
+    table.insert(output, { ["type"] = "input", name = "__target" .. i .. "_enabled", min = 0, max = 1, default = 1, integer = true })
   end
   
   return output
