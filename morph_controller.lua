@@ -1,6 +1,6 @@
 ardour {
   ["type"]    = "dsp",
-  name        = "Morph Processor",
+  name        = "Morph Controller",
   category    = "Utility",
   license     = "MIT",
   author      = "RR",

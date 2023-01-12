@@ -3,7 +3,7 @@ ardour {
   name        = "Morph Lane Linker",
   license     = "MIT",
   author      = "RR",
-  description = [[generalized Morph lane linker.  Needs morph_locator.lua placed before each plugin that is to be controlled as well as a morph_process.lua plugin to do the actual controlling.]]
+  description = [[generalized Morph lane linker.  Needs morph_locator.lua placed before each plugin that is to be controlled as well as a morph_controller.lua plugin to do the actual controlling.]]
 } 
 
 function factory()
@@ -33,7 +33,7 @@ function factory()
           located_plugins[next_id] = proc -- this is value is set in the locator and identifies it
           print("Morph Locator with id", next_id, "is looking at", name)
         end
-        if pp:label() == "Morph Processor" then
+        if pp:label() == "Morph Controller" or pp:label() == "Morph Processor" then
           table.insert(morph_instances, proc)
         end
         if pp:label() == "Morph Locator" then 
@@ -78,16 +78,21 @@ function factory()
     upper_idx = lower_idx + 1
     lower_value = ARDOUR.LuaAPI.get_processor_param(m, start+lower_idx+1)
     upper_value = ARDOUR.LuaAPI.get_processor_param(m, start+upper_idx+1)
+    
+    -- ensure the two values are in range
+    lower_value = math.min(math.max(lower_value, pd.lower), pd.upper)
+    upper_value = math.min(math.max(upper_value, pd.lower), pd.upper)
+    
     percentage = scaled - lower_idx
     
+    if pd.logarithmic then
+      lower_value = math.log(lower_value) / math.log(10)
+      upper_value = math.log(upper_value) / math.log(10)
+    end
     interped = (1-percentage)*lower_value + percentage*upper_value
-    
--- --     ignore logarithmic stuff...  it's kind of annoying how inconsistent the plugins are
---     if pd.logarithmic then
---       interped = 10^interped
---     end
-    interped = math.min(interped, pd.upper)
-    interped = math.max(interped, pd.lower)
+    if pd.logarithmic then
+      interped = 10^interped
+    end
     
     return interped
   end
@@ -129,7 +134,7 @@ function factory()
   function calculate_morphs(verbose)
     for k, m in pairs(morph_instances) do
       if verbose then
-        print("Morph Processor", k)
+        print("Morph Controller", k)
       end
       do_the_morph(m, verbose)
     end
