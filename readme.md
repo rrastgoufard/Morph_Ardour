@@ -7,7 +7,7 @@ This is a general plugin that allows one automation lane to control multiple oth
 
 Before describing how it all works, here is a quick demo video of constructing a multiband delay and controlling it with Morph plugins.  An original signal (simple guitar chords, far left track) is split into eight tracks, each one containing a Morph Locator and an ACE Delay plugin.  Morph Controllers then target each of the eight ACE Delays in order to control their delay times and feedback strengths.  The first half of the video shows the way that parameters are linked, and the second half contains an audio example of the multiband delay in practice.  (Audio starts at 1:20 and is loud.)  Note that everything here could be done using normal automation without the Morphs, but the Morphs make the desired values much more convenient to hit and reduce the 16 automatable parameters down to two.  With only two parameters, they can be mapped easily to a midi controller and played live.
 
-[[video]]
+[![](https://img.youtube.com/vi/5uT9pQQBtcI/0.jpg)](https://youtu.be/5uT9pQQBtcI "Morph Plugin for Ardour")
 
 ## Basic Usage / Architecture Overview
 
