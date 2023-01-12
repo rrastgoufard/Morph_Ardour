@@ -80,4 +80,4 @@ The Lua stuff was surprisingly hard to figure out, but the massive number of scr
 
 I am really enjoying my time with Ardour!  Music is fun.
 
-Here's a link to the repo where you can find the three lua components.
+Here's a link to the repo where you can find the three lua components.  https://github.com/rrastgoufard/Morph_Ardour
