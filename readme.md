@@ -22,6 +22,7 @@ As it stands currently, the "plugin" consists of three separate pieces of lua co
     - The parameter __target_nth_param determines which of the target's parameters is to be controlled.  
     - The __target_enabled parameter determines whether this target's automation is controlled or not.  
     - The remaining parameters store up to 10 values for the target automation lane, and the target_control_point_count parameter dictates how many of those 10 values are interpolated between as the main controller slides between 0 and 1.
+    - Note: the parameter names have been shortened so that more parameters fit on the screen in Ardour's generic UI.  con, ti_ct for count, ti_c0, ti_c1, ..., ti_c9, ti_pid, ti_nth, and ti_ena
 
 3.  morph_lane_linker.lua is a session script that, upon loading, finds all Morph Locators, all plugins immediately following Morph Locators, and all Morph Controllers, and then uses the configurations of the Morph Locators and Controllers to write automation values into the desired targets.  This script should need no intervention except to be loaded.  (And it will need to be unloaded and then reloaded if something major changes, such as moving a Morph Locator.)  For convenience, upon loading it prints out all automatable parameters for any target plugins immediately following Morph Locator plugins.  Check the output log for messages.
 
