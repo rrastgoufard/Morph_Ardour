@@ -10,7 +10,8 @@ function factory()
 
   unique_plugins = {}
   located_plugins = {}
-  morph_instances = {}
+  morph_locators = {}
+  morph_controllers = {}
   morph_lfos = {}
   warnings = {}
   
@@ -35,7 +36,7 @@ function factory()
           print("Morph Locator with id", next_id, "is looking at", name)
         end
         if pp:label() == "Morph Controller" or pp:label() == "Morph Processor" then
-          table.insert(morph_instances, proc)
+          table.insert(morph_controllers, proc)
         end
         if pp:label() == "Morph LFO" then
           table.insert(morph_lfos, {proc, 0, 0.5, 0})
@@ -43,6 +44,7 @@ function factory()
         if pp:label() == "Morph Locator" then 
           next_is_located = true
           next_id = tostring(math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 0)))
+          morph_locators[next_id] = proc
           print("Found a Morph Locator set to", next_id)
           if located_plugins[next_id] then
             table.insert(warnings, "the id " .. next_id .. " has already been used by a Morph Locator")
@@ -111,6 +113,7 @@ function factory()
       local nth_param = math.floor(ARDOUR.LuaAPI.get_processor_param(m, start+12))
       local enabled = ARDOUR.LuaAPI.get_processor_param(m, start+13) > 0.5
       local target = located_plugins[tostring(plugin_id)]
+      local locator = morph_locators[tostring(plugin_id)]
       if verbose then
         if target then
           print(m, t, plugin_id, target, "resolved to", target:to_insert():plugin(0):label())
@@ -123,7 +126,9 @@ function factory()
           -- this silently fails if nth_param is not a valid input parameter for the target processor
           _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
           interped = get_interp(m, value, start, pd)
-          ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
+          if locator:to_insert():enabled() and m:to_insert():enabled() then
+            ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
+          end
         end
       end
     end
@@ -140,6 +145,7 @@ function factory()
     plugin_id = math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 4))
     nth_param = math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 5))
     local target = located_plugins[tostring(plugin_id)]
+    local locator = morph_locators[tostring(plugin_id)]
     
     t0 = m[2] -- the previous time instant
     v0 = m[3] -- the previous value
@@ -196,7 +202,9 @@ function factory()
       if target and nth_param >= 0 then
         -- this silently fails if nth_param is not a valid input parameter for the target processor
         _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-        ARDOUR.LuaAPI.set_processor_param(target, nth_param, v1)
+        if proc:to_insert():enabled() and locator:to_insert():enabled() then
+          ARDOUR.LuaAPI.set_processor_param(target, nth_param, v1)
+        end
       end
     end
         
@@ -211,7 +219,7 @@ function factory()
   end
   
   function calculate_morphs(verbose)
-    for k, m in pairs(morph_instances) do
+    for k, m in pairs(morph_controllers) do
       if verbose then
         print("Morph Controller", k)
       end
