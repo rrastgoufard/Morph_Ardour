@@ -11,6 +11,7 @@ function factory()
   unique_plugins = {}
   located_plugins = {}
   morph_instances = {}
+  morph_lfos = {}
   warnings = {}
   
   function find_morph_locations()
@@ -35,6 +36,9 @@ function factory()
         end
         if pp:label() == "Morph Controller" or pp:label() == "Morph Processor" then
           table.insert(morph_instances, proc)
+        end
+        if pp:label() == "Morph LFO" then
+          table.insert(morph_lfos, {proc, 0, 0.5, 0})
         end
         if pp:label() == "Morph Locator" then 
           next_is_located = true
@@ -125,6 +129,81 @@ function factory()
     end
   end
   
+  function do_the_lfo(m, n_samples, verbose)
+    dt = n_samples / Session:sample_rate()
+    proc = m[1]
+    
+    proc_shape = ARDOUR.LuaAPI.get_processor_param(proc, 0)
+    proc_freq = ARDOUR.LuaAPI.get_processor_param(proc, 1)
+    proc_phase = ARDOUR.LuaAPI.get_processor_param(proc, 2)
+    proc_reset = ARDOUR.LuaAPI.get_processor_param(proc, 3) > 0.5
+    plugin_id = math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 4))
+    nth_param = math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 5))
+    local target = located_plugins[tostring(plugin_id)]
+    
+    t0 = m[2] -- the previous time instant
+    v0 = m[3] -- the previous value
+    a0 = m[4] -- the previous angle
+    
+    f1 = proc_freq
+    t1 = t0 + dt
+    theta = 0 -- theta is unused unless sine is selected
+    
+    if proc_reset then
+      dt = 0
+      t1 = 0
+    end
+    
+    if proc_shape == 0 then -- sine
+      if proc_reset then
+        phase = proc_phase / 180 * math.pi
+      else
+        -- the old angle @ f0,t0 should be the same as the new angle @ f1,t0
+        -- 2*pi*f0*t0 = a0 = 2*pi*f1*t0 + phase
+        phase = a0 - 2*math.pi*f1*t0
+      end
+      theta = 2*math.pi*f1*t1 + phase
+      v1 = 0.5*math.sin(theta) + 0.5 -- value in [0,1]
+    end
+    if proc_shape == 1 then -- saw
+      if proc_reset then
+        phase = proc_phase / 360
+      else
+        phase = v0
+      end
+      v1 = phase + dt * f1
+      if v1 > 1 then
+        v1 = v1 - 1
+      end
+    end
+    
+    -- roll back time in order to not overflow
+    period = 1/f1
+    if t1 > 10*period then
+      t1 = t1 - 10*period
+    end   
+    
+    m[2] = t1
+    m[3] = v1
+    m[4] = theta
+    
+    if verbose then
+      print(proc, m[2], m[3], m[4])
+    end
+    
+    enabled = true
+    if enabled then
+      if target and nth_param >= 0 then
+        -- this silently fails if nth_param is not a valid input parameter for the target processor
+        _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
+        ARDOUR.LuaAPI.set_processor_param(target, nth_param, v1)
+      end
+    end
+        
+    
+  end
+    
+  
   function print_warnings()
     for _,w in pairs(warnings) do
       print("WARNING:", w)
@@ -140,12 +219,24 @@ function factory()
     end
   end
   
+  function calculate_lfos(n_samples, verbose)
+    for k, m in pairs(morph_lfos) do
+      if verbose then
+        print("Morph LFO", k)
+      end
+--       do_the_lfo(m, verbose)
+      do_the_lfo(m, n_samples, verbose)
+    end
+  end
+  
   find_morph_locations()
   print_parameters()
   print_warnings()
   calculate_morphs(true) -- run it once in verbose mode
+  calculate_lfos(0, true) -- run lfos once too
 
   return function(n_samples)
     calculate_morphs(false)
+    calculate_lfos(n_samples, false)
   end
 end
