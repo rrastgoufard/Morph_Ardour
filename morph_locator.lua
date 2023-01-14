@@ -34,5 +34,11 @@ function dsp_configure(ins, outs)
 end
 
 function dsp_run(ins, outs, n_samples)
-  
+  -- process all channels
+  for c = 1, #ins do
+    -- when not processing in-place, copy the data from input to output first
+    if ins[c] ~= outs[c] then
+      ARDOUR.DSP.copy_vector (outs[c], ins[c], n_samples)
+    end
+  end
 end
