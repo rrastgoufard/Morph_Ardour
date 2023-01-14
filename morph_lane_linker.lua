@@ -3,7 +3,7 @@ ardour {
   name        = "Morph Lane Linker",
   license     = "MIT",
   author      = "RR",
-  description = [[generalized Morph lane linker.  Needs morph_locator.lua placed before each plugin that is to be controlled as well as a morph_controller.lua plugin to do the actual controlling.]]
+  description = [[generalized Morph lane linker.  Needs morph_locator.lua placed before each plugin that is to be controlled as well as a morph_controller.lua plugin to do the actual controlling.  Can now run morph_lfo.lua as a low frequency oscillator.]]
 } 
 
 function factory()
