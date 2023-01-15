@@ -31,7 +31,7 @@ As it stands currently, the "plugin" consists of three separate pieces of lua co
     - freq (Hz): the speed of the LFO in cycles per second
     - phase (deg): the starting phase of the LFO
     - reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO to be stopped at the configured phase.
-    - USE LFO?: set to 1 to enable LFO control over.  Set to 0 to disable the LFO for this Controller.
+    - USE LFO?: set to 1 to enable LFO control.  Set to 0 to disable the LFO for this Controller.
 [![](https://img.youtube.com/vi/JN4jlhjcwRE/0.jpg)](https://youtu.be/JN4jlhjcwRE "Morph Controller with LFO for Ardour")
 
 ## "Installation"
