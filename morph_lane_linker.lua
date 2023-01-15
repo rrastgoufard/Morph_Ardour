@@ -11,7 +11,7 @@ function factory()
   MAX_TARGETS = 8
   PARAMS_PER_TARGET = 14
   LFO_PARAM_START = MAX_TARGETS*PARAMS_PER_TARGET + 1
-  USE_LFO = LFO_PARAM_START + 4
+  USE_LFO = LFO_PARAM_START + 6
 
   unique_plugins = {}
   located_plugins = {}
@@ -161,15 +161,25 @@ function factory()
     
     proc_shape = safe_read(proc, LFO_PARAM_START + 0)
     proc_freq = safe_read(proc, LFO_PARAM_START + 1)
-    proc_phase = safe_read(proc, LFO_PARAM_START + 2)
-    proc_reset = safe_read(proc, LFO_PARAM_START + 3) > 0.5
-    use_lfo = safe_read(proc, LFO_PARAM_START + 4) > 0.5
+    proc_beat = safe_read(proc, LFO_PARAM_START + 2)
+    proc_speedmode = safe_read(proc, LFO_PARAM_START + 3) > 0.5
+    proc_phase = safe_read(proc, LFO_PARAM_START + 4)
+    proc_reset = safe_read(proc, LFO_PARAM_START + 5) > 0.5
+    use_lfo = safe_read(proc, LFO_PARAM_START + 6) > 0.5
     
     t0 = m[2] -- the previous time instant
     v0 = m[3] -- the previous value
     a0 = m[4] -- the previous angle
     
     f1 = proc_freq
+    if proc_speedmode then -- if true, then we're in tempo sync
+      bpm = Temporal.TempoPoint:quarter_notes_per_minute()
+      print(bpm)
+-- --       f1 = bpm / 60 * proc_beat
+--       print("sss")
+    end
+    
+    
     t1 = t0 + dt
     theta = 0 -- theta is unused unless sine is selected
     
