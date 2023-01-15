@@ -26,14 +26,13 @@ As it stands currently, the "plugin" consists of three separate pieces of lua co
 
 3.  morph_lane_linker.lua is a session script that, upon loading, finds all Morph Locators, all plugins immediately following Morph Locators, and all Morph Controllers, and then uses the configurations of the Morph Locators and Controllers to write automation values into the desired targets.  This script should need no intervention except to be loaded.  (And it will need to be unloaded and then reloaded if something major changes, such as moving a Morph Locator.)  For convenience, upon loading it prints out all automatable parameters for any target plugins immediately following Morph Locator plugins.  Check the output log for messages.
 
-4.  BONUS: morph_lfo.lua is a low-frequency oscillator that can control a single automation lane with a value between 0 and 1.  It is intended to target the Controller automatable of a Morph Controller.  It has the same target ID and target nth plugin setup using a Morph Locator and Morph Lane Linker, just like how a normal Morph Controller would be configured.  The LFO's parameters are as follows.
+4.  BONUS: morph_controller.lua can be configured as a low-frequency oscillator.  When USE LFO? is enabled, then the Controller's value will be automatically modulated by the LFO.
     - shape: choose between sine and saw
     - freq (Hz): the speed of the LFO in cycles per second
     - phase (deg): the starting phase of the LFO
     - reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO to be stopped at the configured phase.
-    - locator ID: the ID of a Morph Locator that precedes the plugin that is to be targeted.
-    - nth param: which of the target plugin's parameters is to be controlled.  See Ardour's session log when loading morph_lane_linker.lua to see a list of all plugins and their parameters in the current session.
-[![](https://img.youtube.com/vi/AH1eiFuhyWI/0.jpg)](https://youtu.be/AH1eiFuhyWI "Morph LFO for Ardour")
+    - USE LFO?: set to 1 to enable LFO control over.  Set to 0 to disable the LFO for this Controller.
+[![](https://img.youtube.com/vi/JN4jlhjcwRE/0.jpg)](https://youtu.be/JN4jlhjcwRE "Morph Controller with LFO for Ardour")
 
 ## "Installation"
 
