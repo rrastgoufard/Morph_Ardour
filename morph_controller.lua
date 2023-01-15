@@ -11,7 +11,7 @@ MAX_TARGETS = 8
 
 function dsp_ioconfig()
   return {
-    {audio_in = -1, audio_out = -1},
+    {audio_in = -1, audio_out = -1, midi_in = 1, midi_out = 1},
   }
 end
 
@@ -56,14 +56,10 @@ end
 function dsp_configure(ins, outs)
   assert (ins:n_audio() == outs:n_audio())
   collectgarbage()
+  n_out = outs
 end
 
-function dsp_run(ins, outs, n_samples)
-  -- process all channels
-  for c = 1, #ins do
-    -- when not processing in-place, copy the data from input to output first
-    if ins[c] ~= outs[c] then
-      ARDOUR.DSP.copy_vector (outs[c], ins[c], n_samples)
-    end
-  end
+-- https://github.com/Ardour/ardour/blob/master/share/scripts/_rawmidi.lua
+function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
+  ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
 end

@@ -20,6 +20,19 @@ function factory()
   morph_lfos = {}
   warnings = {}
   
+  function safe_read(proc, n)
+    if proc then
+      return ARDOUR.LuaAPI.get_processor_param(proc, n)
+    end
+    return 
+  end
+  
+  function safe_write(proc, n, value)
+    if proc then
+      ARDOUR.LuaAPI.set_processor_param(proc, n, value)
+    end
+  end
+  
   function find_morph_locations()
     print("\n\n\nSearching all plugins on all routes")
     for r in Session:get_routes():iter() do
@@ -45,7 +58,7 @@ function factory()
         end
         if pp:label() == "Morph Locator" then 
           next_is_located = true
-          next_id = tostring(math.floor(ARDOUR.LuaAPI.get_processor_param(proc, 0)))
+          next_id = tostring(math.floor(safe_read(proc, 0)))
           morph_locators[next_id] = proc
           print("Found a Morph Locator set to", next_id)
           if located_plugins[next_id] then
@@ -80,12 +93,12 @@ function factory()
   end  
   
   function get_interp(m, value, start, pd)
-    count = math.floor(ARDOUR.LuaAPI.get_processor_param(m, start))
+    count = math.floor(safe_read(m, start))
     scaled = value * (count - 1)
     lower_idx = math.floor(scaled)
     upper_idx = lower_idx + 1
-    lower_value = ARDOUR.LuaAPI.get_processor_param(m, start+lower_idx+1)
-    upper_value = ARDOUR.LuaAPI.get_processor_param(m, start+upper_idx+1)
+    lower_value = safe_read(m, start+lower_idx+1)
+    upper_value = safe_read(m, start+upper_idx+1)
     
     -- ensure the two values are in range
     lower_value = math.min(math.max(lower_value, pd.lower), pd.upper)
@@ -106,12 +119,16 @@ function factory()
   end
   
   function do_the_morph(m, verbose)
-    value = ARDOUR.LuaAPI.get_processor_param(m, 0)
+    if not m then
+      return
+    end
+    
+    value = safe_read(m, 0)
     for t=0,MAX_TARGETS-1 do    
       local start = t*PARAMS_PER_TARGET + 1
-      local plugin_id = math.floor(ARDOUR.LuaAPI.get_processor_param(m, start+11))
-      local nth_param = math.floor(ARDOUR.LuaAPI.get_processor_param(m, start+12))
-      local enabled = ARDOUR.LuaAPI.get_processor_param(m, start+13) > 0.5
+      local plugin_id = math.floor(safe_read(m, start+11))
+      local nth_param = math.floor(safe_read(m, start+12))
+      local enabled = safe_read(m, start+13) > 0.5
       local target = located_plugins[tostring(plugin_id)]
       local locator = morph_locators[tostring(plugin_id)]
       if verbose then
@@ -126,8 +143,8 @@ function factory()
           -- this silently fails if nth_param is not a valid input parameter for the target processor
           _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
           interped = get_interp(m, value, start, pd)
-          if locator:to_insert():enabled() and m:to_insert():enabled() then
-            ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
+          if locator and locator:to_insert():enabled() and m and m:to_insert():enabled() then
+            safe_write(target, nth_param, interped)
           end
         end
       end
@@ -138,11 +155,15 @@ function factory()
     dt = n_samples / Session:sample_rate()
     proc = m[1]
     
-    proc_shape = ARDOUR.LuaAPI.get_processor_param(proc, LFO_PARAM_START + 0)
-    proc_freq = ARDOUR.LuaAPI.get_processor_param(proc, LFO_PARAM_START + 1)
-    proc_phase = ARDOUR.LuaAPI.get_processor_param(proc, LFO_PARAM_START + 2)
-    proc_reset = ARDOUR.LuaAPI.get_processor_param(proc, LFO_PARAM_START + 3) > 0.5
-    use_lfo = ARDOUR.LuaAPI.get_processor_param(proc, LFO_PARAM_START + 4) > 0.5
+    if not proc then
+      return
+    end
+    
+    proc_shape = safe_read(proc, LFO_PARAM_START + 0)
+    proc_freq = safe_read(proc, LFO_PARAM_START + 1)
+    proc_phase = safe_read(proc, LFO_PARAM_START + 2)
+    proc_reset = safe_read(proc, LFO_PARAM_START + 3) > 0.5
+    use_lfo = safe_read(proc, LFO_PARAM_START + 4) > 0.5
     
     t0 = m[2] -- the previous time instant
     v0 = m[3] -- the previous value
@@ -194,8 +215,8 @@ function factory()
       print(proc, m[2], m[3], m[4])
     end
     
-    if use_lfo and proc:to_insert():enabled() then
-      ARDOUR.LuaAPI.set_processor_param(proc, 0, v1)
+    if proc and use_lfo and proc:to_insert():enabled() then
+      safe_write(proc, 0, v1)
     end
     
   end
@@ -212,10 +233,12 @@ function factory()
       if verbose then
         print("Morph Controller", k)
       end
-      if ARDOUR.LuaAPI.get_processor_param(m[1], USE_LFO) > 0.5 then
-        do_the_lfo(m, n_samples, verbose)
+      if m[1] then
+        if safe_read(m[1], USE_LFO) > 0.5 then
+          do_the_lfo(m, n_samples, verbose)
+        end
+        do_the_morph(m[1], verbose)
       end
-      do_the_morph(m[1], verbose)
     end
   end
   
