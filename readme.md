@@ -29,6 +29,8 @@ As it stands currently, the "plugin" consists of three separate pieces of lua co
 4.  BONUS: morph_controller.lua can be configured as a low-frequency oscillator.  When USE LFO? is enabled, then the Controller's value will be automatically modulated by the LFO.
     - shape: choose between sine and saw
     - freq (Hz): the speed of the LFO in cycles per second
+    - beat div: the speed of the LFO in terms of the current transport location's tempo.  Can specify the speed of a whole measure (1/1), half measure (1/2), quarter note (1/4), quarter note triplet (1/4T), etc.
+    - speed mode: choose to use freq (Hz) or beat div when determining LFO speed
     - phase (deg): the starting phase of the LFO
     - reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO to be stopped at the configured phase.
     - USE LFO?: set to 1 to enable LFO control.  Set to 0 to disable the LFO for this Controller.
