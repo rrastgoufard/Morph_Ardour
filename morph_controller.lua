@@ -39,8 +39,7 @@ function dsp_params()
   
   table.insert(output,  { ["type"] = "input", name = "shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
   table.insert(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 10, default = 1, logarithmic = true })
-  table.insert(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 3, enum = true, scalepoints = { 
-    ["2/1"] = 0.125,
+  table.insert(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
     ["1/1"] = 0.25,
     ["1/2"] = 0.5,
     ["1/4"] = 1,

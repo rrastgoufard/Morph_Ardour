@@ -34,7 +34,10 @@ function factory()
   end
   
   function find_morph_locations()
-    print("\n\n\nSearching all plugins on all routes")
+    print()
+    print()
+    print()
+    print("Searching all plugins on all routes")
     for r in Session:get_routes():iter() do
       local i = 0
       local next_is_located = false
@@ -173,12 +176,11 @@ function factory()
     
     f1 = proc_freq
     if proc_speedmode then -- if true, then we're in tempo sync
-      bpm = Temporal.TempoPoint:quarter_notes_per_minute()
-      print(bpm)
--- --       f1 = bpm / 60 * proc_beat
---       print("sss")
+      tnow = Temporal.timepos_t(Session:transport_sample())
+      tm = Temporal.TempoMap.read()
+      bpm = tm:quarters_per_minute_at(tnow)
+      f1 = bpm / 60 * proc_beat
     end
-    
     
     t1 = t0 + dt
     theta = 0 -- theta is unused unless sine is selected
