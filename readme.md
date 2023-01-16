@@ -70,6 +70,10 @@ Because the main component is a "session" script, it requires a session in order
 ### Distant Future
 
 - Modify morph_lane_linker.lua to constantly watch the project and auto-configure itself as necessary instead of relying on unload/reload
+
+This is tentatively done!  The morph_lane_linker.lua script checks the entire session once every 5 seconds while the transport is not running.  Please let me know if you run into memory issues.
+[![](https://img.youtube.com/vi/fxkiRIib1u0/0.jpg)](https://youtu.be/fxkiRIib1u0 "Live reload for morph lane linker")
+
 - Is there a way to do automated / unit tests on Lua code?  Would it be possible to get a headless Ardour session that could run all of the components such that I could automate creating a track, creating a plugin, loading the Morph stuff, changing values, and ensuring that the appropriate automatables have the correct values?
 - Is it possible for a Lua DSP processor (or any processor, for that matter) to access the Session and Ardour.LuaAPI objects in the dsp_run method?  If so, then all of the morph_lane_linker code could be moved into the morph_processor to eliminate the session script.
 

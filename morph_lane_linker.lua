@@ -17,7 +17,6 @@ function factory()
   located_plugins = {}
   morph_locators = {}
   morph_controllers = {}
-  morph_lfos = {}
   warnings = {}
   
   function safe_read(proc, n)
@@ -33,11 +32,27 @@ function factory()
     end
   end
   
-  function find_morph_locations()
-    print()
-    print()
-    print()
-    print("Searching all plugins on all routes")
+  function add_controller(proc)
+    exists = false
+    for k, m in pairs(morph_controllers) do
+      if proc == m[1] then
+        exists = true
+      end
+    end
+    if not exists then
+      print("This is a new controller.  Adding now!")
+      table.insert(morph_controllers, {proc, 0, 0.5, 0})
+    end
+  end
+  
+  function find_morph_locations(verbose)
+    local locator_count = 0
+    if verbose then
+      print()
+      print()
+      print()
+      print("Searching all plugins on all routes")
+    end
     for r in Session:get_routes():iter() do
       local i = 0
       local next_is_located = false
@@ -54,16 +69,21 @@ function factory()
         
         if next_is_located then
           located_plugins[next_id] = proc -- this is value is set in the locator and identifies it
-          print("Morph Locator with id", next_id, "is looking at", name)
+          locator_count = locator_count + 1
+          if verbose then
+            print("Morph Locator with id", next_id, "is looking at", name)
+          end
         end
         if pp:label() == "Morph Controller" or pp:label() == "Morph Processor" then
-          table.insert(morph_controllers, {proc, 0, 0.5, 0})
+          add_controller(proc)
         end
         if pp:label() == "Morph Locator" then 
           next_is_located = true
           next_id = tostring(math.floor(safe_read(proc, 0)))
           morph_locators[next_id] = proc
-          print("Found a Morph Locator set to", next_id)
+          if verbose then
+            print("Found a Morph Locator set to", next_id)
+          end
           if located_plugins[next_id] then
             table.insert(warnings, "the id " .. next_id .. " has already been used by a Morph Locator")
           end
@@ -75,7 +95,11 @@ function factory()
         i = i + 1
       end
     end
-    print("Finished examining all plugins")
+    if verbose then
+      print("Finished examining all plugins")
+      print("Controllers:", #morph_controllers)
+      print("Locators:", locator_count) -- for some reason, #array does not count number of entries in sparse array
+    end
   end
   
   function print_parameters()
@@ -254,12 +278,21 @@ function factory()
     end
   end
   
-  find_morph_locations()
+  find_morph_locations(true)
   print_parameters()
   print_warnings()
   calculate_morphs(0, true) -- run it once in verbose mode
+  
+  local time_since_last_check = 0
 
   return function(n_samples)
+    if not Session:transport_rolling() then
+      time_since_last_check = time_since_last_check + n_samples / Session:sample_rate()
+      if time_since_last_check > 5 then
+        find_morph_locations(false)
+        time_since_last_check = 0
+      end
+    end
     calculate_morphs(n_samples, false)
   end
 end
