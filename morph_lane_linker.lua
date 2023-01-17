@@ -17,7 +17,6 @@ function factory()
   located_plugins = {}
   morph_locators = {}
   morph_controllers = {}
-  warnings = {}
   
   function safe_read(proc, n)
     if proc then
@@ -28,7 +27,10 @@ function factory()
   
   function safe_write(proc, n, value)
     if proc then
-      ARDOUR.LuaAPI.set_processor_param(proc, n, value)
+      plug = proc:to_insert():plugin(0)
+      if plug:parameter_is_input(n) then
+        ARDOUR.LuaAPI.set_processor_param(proc, n, value)
+      end
     end
   end
   
@@ -44,6 +46,25 @@ function factory()
       table.insert(morph_controllers, {proc, 0, 0.5, 0})
     end
   end
+  
+  function print_parameters(name, proc)
+    print(name)
+    plug = proc:to_insert():plugin(0)
+    param_count = 0
+    for j = 0, plug:parameter_count() - 1 do
+      if plug:parameter_is_control(j) then
+        local label = plug:parameter_label(j)
+        local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
+        local pd = descriptor_table[2]
+        if plug:parameter_is_input(j) then
+          print("     ", param_count, " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
+        else
+          print("       ", " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
+        end
+        param_count = param_count + 1
+      end
+    end
+  end    
   
   function find_morph_locations(verbose)
     local locator_count = 0
@@ -65,7 +86,10 @@ function factory()
         local name = pi:type() .. "-" .. pp:unique_id() .. " named: " .. pp:label()
         local id = pp:id():to_s()
         
-        unique_plugins[pp:unique_id()] = proc -- keep track of all plugins so that we can print out their parameter lists later
+        if not unique_plugins[pp:unique_id()] then
+          unique_plugins[pp:unique_id()] = proc -- keep track of all plugins so that we can print out their parameter lists later
+          print_parameters(name, proc)
+        end
         
         if next_is_located then
           located_plugins[next_id] = proc -- this is value is set in the locator and identifies it
@@ -84,9 +108,6 @@ function factory()
           if verbose then
             print("Found a Morph Locator set to", next_id)
           end
-          if located_plugins[next_id] then
-            table.insert(warnings, "the id " .. next_id .. " has already been used by a Morph Locator")
-          end
         else
           next_is_located = false
           next_id = -1
@@ -101,23 +122,6 @@ function factory()
       print("Locators:", locator_count) -- for some reason, #array does not count number of entries in sparse array
     end
   end
-  
-  function print_parameters()
-    for name, proc in pairs(unique_plugins) do
-      print(name)
-      plug = proc:to_insert():plugin(0)
-      param_count = 0
-      for j = 0, plug:parameter_count() - 1 do
-        if plug:parameter_is_control(j) then
-          local label = plug:parameter_label(j)
-          local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
-          local pd = descriptor_table[2]
-          print("     ", param_count, " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
-          param_count = param_count + 1
-        end
-      end
-    end
-  end  
   
   function get_interp(m, value, start, pd)
     count = math.floor(safe_read(m, start))
@@ -256,13 +260,6 @@ function factory()
     end
     
   end
-    
-  
-  function print_warnings()
-    for _,w in pairs(warnings) do
-      print("WARNING:", w)
-    end
-  end
   
   function calculate_morphs(n_samples, verbose)
     for k, m in pairs(morph_controllers) do
@@ -279,8 +276,6 @@ function factory()
   end
   
   find_morph_locations(true)
-  print_parameters()
-  print_warnings()
   calculate_morphs(0, true) -- run it once in verbose mode
   
   local time_since_last_check = 0
