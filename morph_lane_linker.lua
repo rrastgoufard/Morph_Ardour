@@ -74,10 +74,14 @@ function factory()
       print()
       print("Searching all plugins on all routes")
     end
+    
+    -- search through all routes
     for r in Session:get_routes():iter() do
-      local i = 0
+      local i = 0 -- keep track of plugin index on this route
       local next_is_located = false
       local next_id = -1
+      
+      -- iterate through all plugins on this route
       while true do
         local proc = r:nth_plugin(i)
         if proc:isnil() then break end
@@ -86,17 +90,20 @@ function factory()
         local name = pi:type() .. "-" .. pp:unique_id() .. " named: " .. pp:label()
         local id = pp:id():to_s()
         
+        -- if we have not yet encountered this plugin type, print out its parameter list
         if not unique_plugins[pp:unique_id()] then
-          unique_plugins[pp:unique_id()] = proc -- keep track of all plugins so that we can print out their parameter lists later
+          unique_plugins[pp:unique_id()] = proc
           print_parameters(name, proc)
         end
-        
+
+        -- if we found a locator previously, then this plugin is the target
         if next_is_located then
-          located_plugins[next_id] = proc -- this is value is set in the locator and identifies it
-          locator_count = locator_count + 1
-          if verbose then
-            print("Morph Locator with id", next_id, "is looking at", name)
+          -- if this locator was previously looking at a target that was different from what it sees now, print info that the target has changed
+          if not (located_plugins[next_id] == proc) then
+            located_plugins[next_id] = proc
+            print("Morph Locator", next_id, "is looking at", name)
           end
+          locator_count = locator_count + 1
         end
         if pp:label() == "Morph Controller" or pp:label() == "Morph Processor" then
           add_controller(proc)
@@ -281,8 +288,8 @@ function factory()
   local time_since_last_check = 0
 
   return function(n_samples)
+    time_since_last_check = time_since_last_check + n_samples / Session:sample_rate()
     if not Session:transport_rolling() then
-      time_since_last_check = time_since_last_check + n_samples / Session:sample_rate()
       if time_since_last_check > 5 then
         find_morph_locations(false)
         time_since_last_check = 0
