@@ -66,6 +66,7 @@ local MAX_FLASHES = 3
 local isprinting = false
 local printing_proc = nil
 local printing_current_param = 0
+local printing_params_found = 0
 
 function check_is_flashing_or_printing(proc, n_samples)
   if isflashing then
@@ -86,7 +87,8 @@ function check_is_flashing_or_printing(proc, n_samples)
   
   if isprinting then
     -- print_parameters() will set isprinting = false when finished.
-    print_parameters(printing_proc, printing_current_param, printing_current_param + n_samples)
+--     print_parameters(printing_proc, printing_current_param, printing_current_param + n_samples/4)
+    print_parameters(printing_proc, printing_current_param, printing_current_param + 1)
   end
 end
 
@@ -115,9 +117,9 @@ function print_parameters(proc, start_param, end_param)
   name = plug:label()
   if start_param == 0 then 
     print(name)
+    printing_params_found = 0
   end
   
-  param_count = start_param
   for j = start_param, end_param do
     if j > plug:parameter_count() - 1 then 
       isprinting = false
@@ -129,14 +131,14 @@ function print_parameters(proc, start_param, end_param)
       local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
       local pd = descriptor_table[2]
       if plug:parameter_is_input(j) then
-        print("     ", param_count, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
+        print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
       else
         print("       ", " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
       end
-      param_count = param_count + 1
+      printing_params_found = printing_params_found + 1
     end
   end
-  printing_current_param = param_count
+  printing_current_param = end_param + 1
 end
 
 
@@ -155,9 +157,8 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
   while true do
     local proc = r:nth_plugin(i)
     if proc:isnil() then break end
-    local pi = proc:to_insert()
-    local pp = pi:plugin(0)
-    local id = pp:id():to_s()
+    local plug = proc:to_insert():plugin(0)
+    local id = plug:id():to_s()
     
     if id == self:id():to_s() then        
       -- this triggers when "Press to Describe" is pressed
