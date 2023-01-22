@@ -8,10 +8,12 @@ ardour {
 }
 
 MAX_TARGETS = 8
-PARAMS_PER_TARGET = 14
-PID_PARAM = 12
-LFO_PARAM_START = MAX_TARGETS*PARAMS_PER_TARGET + 1
-MEMORY_PER_TARGET = 5
+
+MEMORY_PER_TARGET = 8
+
+CTRL_IDX = {}
+PARAM_IDX = {}
+PARAM_COUNT = 0
 
 local sample_rate = 0
 local targets = {}
@@ -44,35 +46,51 @@ function dsp_configure(ins, outs)
   --   3: parameter max value
   --   4: parameter log
   --   5: is valid?
+  --   6: ctrl_idx tnpid
+  --   7: ctrl_idx tn_ct
+  --   8: ctrl_idx tnlin
   self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
 	self:shmem():clear()
 end
 
+function add_param(output, cfg)
+  table.insert(output, cfg)
+  
+  name = cfg["name"]
+  PARAM_IDX[name] = PARAM_COUNT
+  -- increment index here so that first PARAM_IDX starts at 0 and first CTRL_IDX starts at 1
+  PARAM_COUNT = PARAM_COUNT + 1
+  CTRL_IDX[name] = PARAM_COUNT
+end
+
 function dsp_params()
-  local output = {
-    { ["type"] = "input", name = "con", min = 0, max = 1, default = 0 },
-  }
+  local output = {}
+  add_param(output, { ["type"] = "input", name = "con", min = 0, max = 1, default = 0 } )
   
   for i=0, MAX_TARGETS-1 do
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_0", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_1", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_2", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_3", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_4", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_5", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_6", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_7", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_8", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "_9", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 127, default = -1, integer = true })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "nth", min = -1, max = 4096, default = -1, integer = true })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_0", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_1", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_2", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_3", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_4", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_5", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_6", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_7", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_8", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "_9", min = -99999, max = 99999, default = 0 })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 127, default = -1, integer = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "nth", min = -1, max = 4096, default = -1, integer = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "lin", min = 0, max = 1, default = 1, integer = true, scalepoints = {
+      ["linear"] = 1,
+      ["discrete"] = 0,
+    }})
   end
   
-  table.insert(output,  { ["type"] = "input", name = "shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
-  table.insert(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 10, default = 0.1, logarithmic = true })
-  table.insert(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
+  add_param(output,  { ["type"] = "input", name = "shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
+  add_param(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 10, default = 0.1, logarithmic = true })
+  add_param(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
     ["1/1"] = 0.25,
     ["1/2"] = 0.5,
     ["1/4"] = 1,
@@ -82,10 +100,10 @@ function dsp_params()
     ["1/16"] = 4,
     ["1/16T"] = 6,
   }})
-  table.insert(output,  { ["type"] = "input", name = "speed mode", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["freq (Hz)"] = 0, ["beat div"] = 1} })
-  table.insert(output,  { ["type"] = "input", name = "phase (deg)", min = 0, max = 360, default = 0 })
-  table.insert(output,  { ["type"] = "input", name = "reset", min = 0, max = 1, default = 0, integer = true })
-  table.insert(output,  { ["type"] = "input", name = "USE LFO?", min = 0, max = 1, default = 0, integer = true })
+  add_param(output,  { ["type"] = "input", name = "speed mode", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["freq (Hz)"] = 0, ["beat div"] = 1} })
+  add_param(output,  { ["type"] = "input", name = "phase (deg)", min = 0, max = 360, default = 0 })
+  add_param(output,  { ["type"] = "input", name = "reset", min = 0, max = 1, default = 0, integer = true })
+  add_param(output,  { ["type"] = "input", name = "USE LFO?", min = 0, max = 1, default = 0, integer = true })
   
   return output
 end
@@ -93,7 +111,7 @@ end
 function add_target(locator_id, proc, nextproc)
   local ctrl = CtrlPorts:array()
   for i = 0, MAX_TARGETS - 1 do
-    local id = ctrl[i*PARAMS_PER_TARGET + PID_PARAM + 1]
+    local id = ctrl[CTRL_IDX["t"..i.."pid"]]
     if math.floor(id) == math.floor(locator_id) then
       locators[i] = proc
       if nextproc:isnil() then 
@@ -131,7 +149,7 @@ end
 
 function get_min_max(t)
   local ctrl = CtrlPorts:array()
-  local start = t*PARAMS_PER_TARGET + 1 + 1
+  local start = CTRL_IDX["t"..t.."_ct"]
   local count = math.floor(ctrl[start])
   local settings_min = ctrl[start+1]
   local settings_max = ctrl[start+1]
@@ -155,16 +173,38 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
     shmem[start+4] = 0
   end
   shmem[start+5] = valid
+  shmem[start+6] = CTRL_IDX["t"..t.."pid"]
+  shmem[start+7] = CTRL_IDX["t"..t.."_ct"]
+  shmem[start+8] = CTRL_IDX["t"..t.."lin"]
 end
 
-function get_interp(value, start, pd)
+function get_interp(value, ctrl_ct, ctrl_lin, pd)
   local ctrl = CtrlPorts:array()
-  count = math.floor(ctrl[start])
+  
+  if ctrl[ctrl_lin] > 0.5 then
+    return get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
+  else
+    return get_interp_discrete(value, ctrl_ct, ctrl_lin, pd)
+  end
+end
+  
+function get_interp_discrete(value, ctrl_ct, ctrl_lin, pd)
+  local ctrl = CtrlPorts:array()
+  count = math.floor(ctrl[ctrl_ct])
+  idx = math.min(math.floor(value * count), count-1)
+  idx_value = ctrl[ctrl_ct+idx+1]
+  idx_value = math.min(math.max(idx_value, pd.lower), pd.upper)
+  return idx_value
+end
+  
+function get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
+  local ctrl = CtrlPorts:array()
+  count = math.floor(ctrl[ctrl_ct])
   scaled = value * (count - 1)
   lower_idx = math.floor(scaled)
   upper_idx = lower_idx + 1
-  lower_value = ctrl[start+lower_idx+1]
-  upper_value = ctrl[start+upper_idx+1]
+  lower_value = ctrl[ctrl_ct+lower_idx+1]
+  upper_value = ctrl[ctrl_ct+upper_idx+1]
   
   -- ensure the two values are in range
   lower_value = math.min(math.max(lower_value, pd.lower), pd.upper)
@@ -188,10 +228,13 @@ function do_the_morph(verbose)
   local ctrl = CtrlPorts:array()
   value = ctrl[1]
   for t=0,MAX_TARGETS-1 do    
-    local start = t*PARAMS_PER_TARGET + 1 + 1
-    local plugin_id = math.floor(ctrl[start+11])
-    local nth_param = math.floor(ctrl[start+12])
-    local enabled = ctrl[start+13] > 0.5
+    local plugin_id = math.floor(ctrl[CTRL_IDX["t"..t.."pid"]])
+    local nth_param = math.floor(ctrl[CTRL_IDX["t"..t.."nth"]])
+    local enabled = ctrl[CTRL_IDX["t"..t.."ena"]] > 0.5
+    
+    local ctrl_ct = CTRL_IDX["t"..t.."_ct"]
+    local ctrl_lin = CTRL_IDX["t"..t.."lin"]
+    
     local target = targets[t]
     local locator = locators[t]
     if verbose then
@@ -205,7 +248,7 @@ function do_the_morph(verbose)
       if target and nth_param >= 0 then
         -- this silently fails if nth_param is not a valid input parameter for the target processor
         _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-        interped = get_interp(value, start, pd)
+        interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
         store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1)
         if locator and locator:to_insert():enabled() then
           ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
@@ -225,13 +268,13 @@ function do_the_lfo(n_samples, verbose)
   local ctrl = CtrlPorts:array()
   local dt = n_samples / sample_rate
   
-  local proc_shape = ctrl[LFO_PARAM_START + 1 + 0]
-  local proc_freq = ctrl[LFO_PARAM_START + 1 + 1]
-  local proc_beat = ctrl[LFO_PARAM_START + 1 + 2]
-  local proc_speedmode = ctrl[LFO_PARAM_START + 1 + 3] > 0.5
-  local proc_phase = ctrl[LFO_PARAM_START + 1 + 4]
-  local proc_reset = ctrl[LFO_PARAM_START + 1 + 5] > 0.5
-  local use_lfo = ctrl[LFO_PARAM_START + 1 + 6] > 0.5
+  local proc_shape = ctrl[CTRL_IDX["shape"]]
+  local proc_freq = ctrl[CTRL_IDX["freq (Hz)"]]
+  local proc_beat = ctrl[CTRL_IDX["beat div"]]
+  local proc_speedmode = ctrl[CTRL_IDX["speed mode"]] > 0.5
+  local proc_phase = ctrl[CTRL_IDX["phase (deg)"]]
+  local proc_reset = ctrl[CTRL_IDX["reset"]] > 0.5
+  local use_lfo = ctrl[CTRL_IDX["USE LFO?"]] > 0.5
   
   local f1 = proc_freq
   if proc_speedmode then -- if true, then we're in tempo sync
@@ -336,15 +379,17 @@ end
 local txt = nil -- cache font description (in GUI context)
 
 function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
-  local start_ctrl = t*PARAMS_PER_TARGET + 1 + 1
+  
   local start_shmem = t*MEMORY_PER_TARGET + 1
-  local plugin_id = math.floor(ctrl[start_ctrl+11])
   
   local value = state[start_shmem + 0]
   local minval = state[start_shmem + 1]
   local maxval = state[start_shmem + 2]
   local logarithmic = state[start_shmem + 3] > 0.5
   local valid = state[start_shmem + 4]
+  local ctrl_pid = state[start_shmem + 5]
+  
+  local plugin_id = math.floor(ctrl[ctrl_pid])
   
   txt:set_text(string.format("%d", plugin_id));
 
@@ -381,13 +426,14 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
     ctx:stroke()
     
     -- fill with black
-    ctx:set_line_width(6.0)
+    ctx:set_line_width(cap-2)
     ctx:set_source_rgba(0.1, 0.1, 0.1, 1.0)
     ctx:move_to(tx + w/2, ty + h - th - cap/2)
     ctx:rel_line_to(0, -barheight)
     ctx:stroke()
     
     -- fill partially with color
+    ctx:set_line_width(cap-4)
     ctx:set_source_rgba(r, g, b, 1.0)
     ctx:move_to(tx + w/2, ty + h - th - cap/2)
     ctx:rel_line_to(0, -height)
