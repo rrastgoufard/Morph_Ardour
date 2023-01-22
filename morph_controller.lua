@@ -11,11 +11,15 @@ MAX_TARGETS = 8
 PARAMS_PER_TARGET = 14
 PID_PARAM = 12
 LFO_PARAM_START = MAX_TARGETS*PARAMS_PER_TARGET + 1
+MEMORY_PER_TARGET = 5
 
 local sample_rate = 0
 local targets = {}
 local locators = {}
 local self_proc = -1
+
+local samples_since_draw = 0
+local samples_per_draw = 0
 
 function dsp_ioconfig()
   return {
@@ -26,11 +30,22 @@ end
 
 function dsp_init(rate)
   sample_rate = rate
+  samples_per_draw = math.floor(rate / 25)
+  samples_since_draw = samples_per_draw
 end
 
 function dsp_configure(ins, outs)
   assert (ins:n_audio() == outs:n_audio())
   n_out = outs
+  
+  -- keep track of 
+  --   1: interpolated value
+  --   2: parameter min value
+  --   3: parameter max value
+  --   4: parameter log
+  --   5: is valid?
+  self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
+	self:shmem():clear()
 end
 
 function dsp_params()
@@ -50,7 +65,7 @@ function dsp_params()
     table.insert(output, { ["type"] = "input", name = "t" .. i .. "_7", min = -99999, max = 99999, default = 0 })
     table.insert(output, { ["type"] = "input", name = "t" .. i .. "_8", min = -99999, max = 99999, default = 0 })
     table.insert(output, { ["type"] = "input", name = "t" .. i .. "_9", min = -99999, max = 99999, default = 0 })
-    table.insert(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 128, default = -1, integer = true })
+    table.insert(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 127, default = -1, integer = true })
     table.insert(output, { ["type"] = "input", name = "t" .. i .. "nth", min = -1, max = 4096, default = -1, integer = true })
     table.insert(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true })
   end
@@ -114,6 +129,34 @@ function find_targets()
   end
 end
 
+function get_min_max(t)
+  local ctrl = CtrlPorts:array()
+  local start = t*PARAMS_PER_TARGET + 1 + 1
+  local count = math.floor(ctrl[start])
+  local settings_min = ctrl[start+1]
+  local settings_max = ctrl[start+1]
+  for i = 1,(count-1) do
+    settings_min = math.min(settings_min, ctrl[start+1+i])
+    settings_max = math.max(settings_max, ctrl[start+1+i])
+  end
+  return settings_min, settings_max
+end
+
+function store_values_memory(t, value, param_lower, param_upper, logarithmic, valid)  
+  settings_min, settings_max = get_min_max(t)
+  local start = t*MEMORY_PER_TARGET
+  local shmem = self:shmem():to_float(0):array()
+  shmem[start+1] = value
+  shmem[start+2] = math.max(param_lower, settings_min)
+  shmem[start+3] = math.min(param_upper, settings_max)
+  if logarithmic then
+    shmem[start+4] = 1
+  else
+    shmem[start+4] = 0
+  end
+  shmem[start+5] = valid
+end
+
 function get_interp(value, start, pd)
   local ctrl = CtrlPorts:array()
   count = math.floor(ctrl[start])
@@ -131,14 +174,14 @@ function get_interp(value, start, pd)
   
   if pd.logarithmic then
     lower_value = math.log(lower_value) / math.log(10)
-    upper_value = math.log(upper_value) / math.log(10)
+    lower_value = math.log(upper_value) / math.log(10)
   end
   interped = (1-percentage)*lower_value + percentage*upper_value
   if pd.logarithmic then
     interped = 10^interped
   end
   
-  return interped
+  return interped, pd.lower, pd.upper, pd.logarithmic
 end
 
 function do_the_morph(verbose)
@@ -162,11 +205,15 @@ function do_the_morph(verbose)
       if target and nth_param >= 0 then
         -- this silently fails if nth_param is not a valid input parameter for the target processor
         _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-        interped = get_interp(value, start, pd)
+        interped, param_lower, param_upper, logarithmic = get_interp(value, start, pd)
+        store_values_memory(t, interped, param_lower, param_upper, logarithmic, 1)
         if locator and locator:to_insert():enabled() then
           ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
         end
       end
+    end
+    if not target then
+      store_values_memory(t, 0, 0, 0, 0, 0)
     end
   end
 end
@@ -254,4 +301,138 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
   end
   do_the_lfo(n_samples, false)
   do_the_morph(false)
+  
+  samples_since_draw = samples_since_draw + n_samples
+  if samples_since_draw > samples_per_draw then
+    samples_since_draw = samples_since_draw % samples_per_draw
+    self:queue_draw()
+  end
+end
+
+
+
+
+
+function hsv_to_rgb(h) 
+  -- https://cs.stackexchange.com/questions/64549/convert-hsv-to-rgb-colors
+  local v = 1
+  local s = 1
+  local c = v * s
+  local hp = h / 60
+  local x = c*(1 - math.abs((hp % 2) - 1))
+  
+  if hp >= 0 and hp < 1 then r, g, b = c, x, 0 end
+  if hp >= 1 and hp < 2 then r, g, b = x, c, 0 end
+  if hp >= 2 and hp < 3 then r, g, b = 0, c, x end
+  if hp >= 3 and hp < 4 then r, g, b = 0, x, c end
+  if hp >= 4 and hp < 5 then r, g, b = x, 0, c end
+  if hp >= 5 and hp < 6 then r, g, b = c, 0, x end
+  
+  local m = v - c
+  return r + m, g+m, b+m
+end
+
+
+local txt = nil -- cache font description (in GUI context)
+
+function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
+  local start_ctrl = t*PARAMS_PER_TARGET + 1 + 1
+  local start_shmem = t*MEMORY_PER_TARGET + 1
+  local plugin_id = math.floor(ctrl[start_ctrl+11])
+  
+  local value = state[start_shmem + 0]
+  local minval = state[start_shmem + 1]
+  local maxval = state[start_shmem + 2]
+  local logarithmic = state[start_shmem + 3] > 0.5
+  local valid = state[start_shmem + 4]
+  
+  txt:set_text(string.format("%d", plugin_id));
+
+  local tw, th = txt:get_pixel_size()
+  ctx:set_source_rgba(1, 1, 1, 1.0)
+  ctx:move_to(tx + w/2 - tw/2, ty + h - th)
+  txt:show_in_cairo_context(ctx)
+  
+  local cap = 10
+  local barheight = h - th - cap
+  
+  if valid > 0.5 then
+    if logarithmic then 
+      value = math.log(value) / math.log(10)
+      minval = math.log(minval) / math.log(10)
+      maxval = math.log(maxval) / math.log(10)
+    end
+    if maxval - minval > 0 then
+      height = (value - minval) / (maxval - minval) 
+    else
+      height = 1
+    end
+    height = height * barheight
+    
+    r, g, b = hsv_to_rgb(plugin_id/128*360)
+    
+    ctx:set_line_cap(Cairo.LineCap.Round)
+    
+    -- draw outer white line
+    ctx:set_line_width(cap)
+    ctx:set_source_rgba(1, 1, 1, 1.0)
+    ctx:move_to(tx + w/2, ty + h - th - cap/2)
+    ctx:rel_line_to(0, -barheight)
+    ctx:stroke()
+    
+    -- fill with black
+    ctx:set_line_width(6.0)
+    ctx:set_source_rgba(0.1, 0.1, 0.1, 1.0)
+    ctx:move_to(tx + w/2, ty + h - th - cap/2)
+    ctx:rel_line_to(0, -barheight)
+    ctx:stroke()
+    
+    -- fill partially with color
+    ctx:set_source_rgba(r, g, b, 1.0)
+    ctx:move_to(tx + w/2, ty + h - th - cap/2)
+    ctx:rel_line_to(0, -height)
+    ctx:stroke()
+  end
+  
+  if valid < 0.5 then
+    ctx:rectangle(tx, ty, w, h)
+    ctx:set_source_rgba(0.1, 0.1, 0.1, 0.5)
+    ctx:fill()
+  end
+end
+
+
+function render_inline(ctx, w, max_h)
+  local ctrl = CtrlPorts:array() -- control port array
+  local shmem = self:shmem() -- shared memory region
+  local state = shmem:to_float(0):array() -- cast to lua-table
+  
+  -- prepare text rendering
+  if not txt then
+    -- allocate PangoLayout and set font
+    --http://manual.ardour.org/lua-scripting/class_reference/#Cairo:PangoLayout
+    txt = Cairo.PangoLayout (ctx, "Mono 9px")
+  end  
+  
+  local h = max_h
+  
+  -- clear background
+  r, g, b = 0.1, 0.1, 0.1
+  ctx:rectangle(0, 0, w, h)
+  ctx:set_source_rgba(r, g, b, 1.0)
+  ctx:fill()
+  
+  for t = 0,(MAX_TARGETS-1) do
+    
+    local NROWS = 2
+    local NCOLS = MAX_TARGETS/NROWS
+    local row = math.floor(t / (MAX_TARGETS/NROWS))
+    local col = t % NCOLS
+    local tx = col*(w/NCOLS)
+    local ty = row*(h/NROWS)
+    
+    draw_target(t, tx, ty, w/NCOLS, h/NROWS, ctx, txt, ctrl, state)
+  end
+  
+  return {w, h}
 end
