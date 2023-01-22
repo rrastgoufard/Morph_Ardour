@@ -181,7 +181,7 @@ function get_interp(value, start, pd)
     interped = 10^interped
   end
   
-  return interped, pd.lower, pd.upper, pd.logarithmic
+  return interped
 end
 
 function do_the_morph(verbose)
@@ -205,8 +205,8 @@ function do_the_morph(verbose)
       if target and nth_param >= 0 then
         -- this silently fails if nth_param is not a valid input parameter for the target processor
         _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-        interped, param_lower, param_upper, logarithmic = get_interp(value, start, pd)
-        store_values_memory(t, interped, param_lower, param_upper, logarithmic, 1)
+        interped = get_interp(value, start, pd)
+        store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1)
         if locator and locator:to_insert():enabled() then
           ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
         end
