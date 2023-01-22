@@ -9,7 +9,7 @@ ardour {
 
 MAX_TARGETS = 8
 
-MEMORY_PER_TARGET = 8
+MEMORY_PER_TARGET = 9
 
 CTRL_IDX = {}
 PARAM_IDX = {}
@@ -49,6 +49,7 @@ function dsp_configure(ins, outs)
   --   6: ctrl_idx tnpid
   --   7: ctrl_idx tn_ct
   --   8: ctrl_idx tnlin
+  --   9: is enabled?
   self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
 	self:shmem():clear()
 end
@@ -66,6 +67,7 @@ end
 function dsp_params()
   local output = {}
   add_param(output, { ["type"] = "input", name = "con", min = 0, max = 1, default = 0 } )
+  add_param(output, { ["type"] = "input", name = "vis", min = -1, max = 7, default = -1, integer = true } )
   
   for i=0, MAX_TARGETS-1 do
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
@@ -162,6 +164,7 @@ end
 
 function store_values_memory(t, value, param_lower, param_upper, logarithmic, valid)  
   settings_min, settings_max = get_min_max(t)
+  local ctrl = CtrlPorts:array()
   local start = t*MEMORY_PER_TARGET
   local shmem = self:shmem():to_float(0):array()
   shmem[start+1] = value
@@ -176,6 +179,13 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
   shmem[start+6] = CTRL_IDX["t"..t.."pid"]
   shmem[start+7] = CTRL_IDX["t"..t.."_ct"]
   shmem[start+8] = CTRL_IDX["t"..t.."lin"]
+  
+  enabled = ctrl[CTRL_IDX["t"..t.."ena"]] > 0.5
+  if enabled then
+    shmem[start+9] = 1
+  else
+    shmem[start+9] = 0
+  end
 end
 
 function get_interp(value, ctrl_ct, ctrl_lin, pd)
@@ -244,18 +254,17 @@ function do_the_morph(verbose)
         print(t, plugin_id, nth_param, target, locator)
       end
     end
-    if enabled then
-      if target and nth_param >= 0 then
-        -- this silently fails if nth_param is not a valid input parameter for the target processor
-        _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-        interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
-        store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1)
+    if target and nth_param >= 0 then
+      -- this silently fails if nth_param is not a valid input parameter for the target processor
+      _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
+      interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
+      store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1)
+      if enabled then
         if locator and locator:to_insert():enabled() then
           ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
         end
       end
-    end
-    if not target then
+    else
       store_values_memory(t, 0, 0, 0, 0, 0)
     end
   end
@@ -387,8 +396,9 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   local minval = state[start_shmem + 1]
   local maxval = state[start_shmem + 2]
   local logarithmic = state[start_shmem + 3] > 0.5
-  local valid = state[start_shmem + 4]
+  local valid = state[start_shmem + 4] > 0.5
   local ctrl_pid = state[start_shmem + 5]
+  local enabled = state[start_shmem + 8] > 0.5
   
   local plugin_id = math.floor(ctrl[ctrl_pid])
   
@@ -402,7 +412,7 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   local cap = 10
   local barheight = h - th - cap
   
-  if valid > 0.5 then
+  if valid then
     if logarithmic then 
       value = math.log(value) / math.log(10)
       minval = math.log(minval) / math.log(10)
@@ -441,11 +451,122 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
     ctx:stroke()
   end
   
-  if valid < 0.5 then
+  if not valid then
     ctx:rectangle(tx, ty, w, h)
     ctx:set_source_rgba(0.1, 0.1, 0.1, 0.5)
     ctx:fill()
   end
+  if not enabled then
+    ctx:rectangle(tx, ty, w, h)
+    ctx:set_source_rgba(0.5, 0.5, 0.5, 0.5)
+    ctx:fill()
+  end
+end
+
+function visualize_single(t, w, h, ctx, txt, ctrl, state)
+  
+  local start_shmem = t*MEMORY_PER_TARGET + 1
+  
+  local value = state[start_shmem + 0]
+  local minval = state[start_shmem + 1]
+  local maxval = state[start_shmem + 2]
+  local logarithmic = state[start_shmem + 3] > 0.5
+  local valid = state[start_shmem + 4] > 0.5
+  local ctrl_pid = state[start_shmem + 5]
+  local ctrl_ct = state[start_shmem + 6]
+  local ctrl_lin = state[start_shmem + 7]
+  local enabled = state[start_shmem + 8] > 0.5
+  
+  local plugin_id = math.floor(ctrl[ctrl_pid])
+  local r,g,b = 1, 1, 1
+  
+  txt:set_text(string.format("t%d | %d", t, plugin_id));
+  
+  local tw, th = txt:get_pixel_size()
+  ctx:set_source_rgba(r, g, b, 1.0)
+  ctx:move_to(w/2 - tw/2, h - th)
+  txt:show_in_cairo_context(ctx)
+  
+  if valid then
+    r, g, b = 0.5, 0.5, 0.5
+    local pd = {}
+    pd.lower = minval
+    pd.upper = maxval
+    pd.logarithmic = logarithmic
+    
+    local padH = 5
+    local padW = 5
+    local W = w - 2*padW
+    local H = h - th
+    
+    -- interpolate the path that the parameter will take over [0,1]
+    ctx:set_line_width(1)
+    ctx:set_source_rgba(r, g, b, 1.0)
+    for x = 0, W do
+      local trackvalue = x / W
+      local interped = get_interp(trackvalue, ctrl_ct, ctrl_lin, pd)
+      local scaled
+      if maxval - minval > 0 then
+        scaled = (interped - minval) / (maxval - minval)
+      else
+        scaled = 0.5
+      end
+      local y = (H-2*padH)*(1 - scaled) + padH
+      if x == 0 then ctx:move_to(padW, y) end
+      ctx:line_to(x + padW, y)
+    end
+    ctx:stroke()
+    
+    local interped = get_interp(ctrl[1], ctrl_ct, ctrl_lin, pd)
+    local scaled
+    if maxval - minval > 0 then
+      scaled = (interped - minval) / (maxval - minval)
+    else
+      scaled = 0.5
+    end
+    
+    
+    -- draw dot
+    local cap = 10
+    local x = ctrl[1]*W + padW
+    local y = (H-2*padH)*(1-scaled) + padH
+    
+    ctx:set_line_cap(Cairo.LineCap.Round)
+    
+    -- draw outer white line
+    ctx:set_line_width(cap)
+    ctx:set_source_rgba(1, 1, 1, 1.0)
+    ctx:move_to(x, y)
+    ctx:rel_line_to(0, 0)
+    ctx:stroke()
+    
+    -- fill with black
+    ctx:set_line_width(cap-2)
+    ctx:set_source_rgba(0.1, 0.1, 0.1, 1.0)
+    ctx:move_to(x, y)
+    ctx:rel_line_to(0, 0)
+    ctx:stroke()
+    
+    -- add colored dot
+    r, g, b = hsv_to_rgb(plugin_id/128*360)
+    ctx:set_line_width(cap-4)
+    ctx:set_source_rgba(r, g, b, 1.0)
+    ctx:move_to(x, y)
+    ctx:rel_line_to(0, 0)
+    ctx:stroke()
+  end
+  
+  if not valid then
+    ctx:rectangle(0, 0, w, h)
+    ctx:set_source_rgba(0.1, 0.1, 0.1, 0.5)
+    ctx:fill()
+  end
+  if not enabled then
+    ctx:rectangle(0, 0, w, h)
+    ctx:set_source_rgba(0.5, 0.5, 0.5, 0.5)
+    ctx:fill()
+  end
+  
 end
 
 
@@ -469,16 +590,21 @@ function render_inline(ctx, w, max_h)
   ctx:set_source_rgba(r, g, b, 1.0)
   ctx:fill()
   
-  for t = 0,(MAX_TARGETS-1) do
+  local visualize_all = ctrl[2] < -0.5
+  if visualize_all then
     
     local NROWS = 2
     local NCOLS = MAX_TARGETS/NROWS
-    local row = math.floor(t / (MAX_TARGETS/NROWS))
-    local col = t % NCOLS
-    local tx = col*(w/NCOLS)
-    local ty = row*(h/NROWS)
     
-    draw_target(t, tx, ty, w/NCOLS, h/NROWS, ctx, txt, ctrl, state)
+    for t = 0,(MAX_TARGETS-1) do  
+      local row = math.floor(t / (MAX_TARGETS/NROWS))
+      local col = t % NCOLS
+      local tx = col*(w/NCOLS)
+      local ty = row*(h/NROWS)
+      draw_target(t, tx, ty, w/NCOLS, h/NROWS, ctx, txt, ctrl, state)
+    end
+  else
+    visualize_single(ctrl[2], w, h, ctx, txt, ctrl, state)
   end
   
   return {w, h}
