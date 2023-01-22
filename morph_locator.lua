@@ -165,7 +165,7 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
       if ctrl[2] > 0.5 and not isflashing and not isprinting then
         local routename = r:name()
         print()
-        print(string.format("Hi!  I am a Morph Locator, plugin %d on %s, with ID=%d", i+1, routename, ctrl[1]))
+        print(string.format("Hi!  I am a Morph Locator (ver2), plugin %d on %s, with ID=%d", i+1, routename, ctrl[1]))
         isflashing = true
         isprinting = true
         printing_proc = r:nth_plugin(i+1)

@@ -50,13 +50,18 @@ function dsp_configure(ins, outs)
   --   7: ctrl_idx tn_ct
   --   8: ctrl_idx tnlin
   --   9: is enabled?
+  -- all of these are needed because this is the only (?) way to get arrays of data to the graphics render_inline function
+  -- it _seems_ that single variables in the global scope can make it across, but not lua tables
   self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
-	self:shmem():clear()
+  self:shmem():clear()
 end
 
 function add_param(output, cfg)
+  
+  -- this line is sufficient for creating the parameters
   table.insert(output, cfg)
   
+  -- because parameters might be re-ordered, it is nice to keep track of parameter indices by name for easy access later
   name = cfg["name"]
   PARAM_IDX[name] = PARAM_COUNT
   -- increment index here so that first PARAM_IDX starts at 0 and first CTRL_IDX starts at 1
@@ -66,8 +71,25 @@ end
 
 function dsp_params()
   local output = {}
-  add_param(output, { ["type"] = "input", name = "con", min = 0, max = 1, default = 0 } )
-  add_param(output, { ["type"] = "input", name = "vis", min = -1, max = 7, default = -1, integer = true } )
+  add_param(output, { ["type"] = "input", name = "Controller", min = 0, max = 1, default = 0 } )
+  add_param(output, { ["type"] = "input", name = "Visualize", min = -1, max = 7, default = -1, integer = true } )
+  
+  add_param(output,  { ["type"] = "input", name = "lfo shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
+  add_param(output,  { ["type"] = "input", name = "lfo freq (Hz)", min = 0.001, max = 20, default = 0.1, logarithmic = true })
+  add_param(output,  { ["type"] = "input", name = "lfo beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
+    ["1/1"] = 0.25,
+    ["1/2"] = 0.5,
+    ["1/4"] = 1,
+    ["1/4T"] = 1.5,
+    ["1/8"] = 2,
+    ["1/8T"] = 3,
+    ["1/16"] = 4,
+    ["1/16T"] = 6,
+  }})
+  add_param(output,  { ["type"] = "input", name = "lfo mode", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["freq (Hz)"] = 0, ["beat div"] = 1} })
+  add_param(output,  { ["type"] = "input", name = "lfo phase (deg)", min = 0, max = 360, default = 0 })
+  add_param(output,  { ["type"] = "input", name = "lfo reset", min = 0, max = 1, default = 0, integer = true })
+  add_param(output,  { ["type"] = "input", name = "Use LFO?", min = 0, max = 1, default = 0, integer = true, toggled = true })
   
   for i=0, MAX_TARGETS-1 do
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
@@ -83,32 +105,19 @@ function dsp_params()
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_9", min = -99999, max = 99999, default = 0 })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 127, default = -1, integer = true })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "nth", min = -1, max = 4096, default = -1, integer = true })
-    add_param(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true, toggled = true })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "lin", min = 0, max = 1, default = 1, integer = true, scalepoints = {
       ["linear"] = 1,
       ["discrete"] = 0,
     }})
   end
   
-  add_param(output,  { ["type"] = "input", name = "shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
-  add_param(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 20, default = 0.1, logarithmic = true })
-  add_param(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
-    ["1/1"] = 0.25,
-    ["1/2"] = 0.5,
-    ["1/4"] = 1,
-    ["1/4T"] = 1.5,
-    ["1/8"] = 2,
-    ["1/8T"] = 3,
-    ["1/16"] = 4,
-    ["1/16T"] = 6,
-  }})
-  add_param(output,  { ["type"] = "input", name = "speed mode", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["freq (Hz)"] = 0, ["beat div"] = 1} })
-  add_param(output,  { ["type"] = "input", name = "phase (deg)", min = 0, max = 360, default = 0 })
-  add_param(output,  { ["type"] = "input", name = "reset", min = 0, max = 1, default = 0, integer = true })
-  add_param(output,  { ["type"] = "input", name = "USE LFO?", min = 0, max = 1, default = 0, integer = true })
-  
   return output
 end
+
+
+-- the following two functions look through all routes to find Locators.
+-- If a Locator is found with an ID that this Controller cares about, then save it and the following processor for later access.
 
 function add_target(locator_id, proc, nextproc)
   local ctrl = CtrlPorts:array()
@@ -149,6 +158,12 @@ function find_targets()
   end
 end
 
+
+
+-- Look through all of a target's control points to find the minimum and maximum.
+-- This is used for scaling the output displays.
+-- (Naively, the parameter range is -99999 to 99999, but using those as axis limits will make a movement of 200 -> 300 invisible)
+
 function get_min_max(t)
   local ctrl = CtrlPorts:array()
   local start = CTRL_IDX["t"..t.."_ct"]
@@ -161,6 +176,9 @@ function get_min_max(t)
   end
   return settings_min, settings_max
 end
+
+-- Store values in memory so that render_inline can have access to these things.
+-- Many of these are in global scope but are stored in lua tables which don't seem to be globally accessible from render_inline
 
 function store_values_memory(t, value, param_lower, param_upper, logarithmic, valid)  
   settings_min, settings_max = get_min_max(t)
@@ -187,6 +205,14 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
     shmem[start+9] = 0
   end
 end
+
+
+-- get_interp is the main function for interpolating through control points
+-- It requires 
+--    a value, 
+--    the ctrl index of a target's count parameter, 
+--    ctrl index of linear/discrete, 
+--    and parameter descriptor containing lower, upper, log
 
 function get_interp(value, ctrl_ct, ctrl_lin, pd)
   local ctrl = CtrlPorts:array()
@@ -234,6 +260,10 @@ function get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
   return interped
 end
 
+
+
+-- iterates through all targets, and for all valid target/locator/parameter configurations, use lua to write the processor parameter
+
 function do_the_morph(verbose)
   local ctrl = CtrlPorts:array()
   value = ctrl[1]
@@ -277,13 +307,13 @@ function do_the_lfo(n_samples, verbose)
   local ctrl = CtrlPorts:array()
   local dt = n_samples / sample_rate
   
-  local proc_shape = ctrl[CTRL_IDX["shape"]]
-  local proc_freq = ctrl[CTRL_IDX["freq (Hz)"]]
-  local proc_beat = ctrl[CTRL_IDX["beat div"]]
-  local proc_speedmode = ctrl[CTRL_IDX["speed mode"]] > 0.5
-  local proc_phase = ctrl[CTRL_IDX["phase (deg)"]]
-  local proc_reset = ctrl[CTRL_IDX["reset"]] > 0.5
-  local use_lfo = ctrl[CTRL_IDX["USE LFO?"]] > 0.5
+  local proc_shape = ctrl[CTRL_IDX["lfo shape"]]
+  local proc_freq = ctrl[CTRL_IDX["lfo freq (Hz)"]]
+  local proc_beat = ctrl[CTRL_IDX["lfo beat div"]]
+  local proc_speedmode = ctrl[CTRL_IDX["lfo mode"]] > 0.5
+  local proc_phase = ctrl[CTRL_IDX["lfo phase (deg)"]]
+  local proc_reset = ctrl[CTRL_IDX["lfo reset"]] > 0.5
+  local use_lfo = ctrl[CTRL_IDX["Use LFO?"]] > 0.5
   
   local f1 = proc_freq
   if proc_speedmode then -- if true, then we're in tempo sync
@@ -291,7 +321,7 @@ function do_the_lfo(n_samples, verbose)
     local tm = Temporal.TempoMap.read()
     local bpm = tm:quarters_per_minute_at(tnow)
     f1 = bpm / 60 * proc_beat
-    ARDOUR.LuaAPI.set_processor_param(self_proc, PARAM_IDX["freq (Hz)"], f1)
+    ARDOUR.LuaAPI.set_processor_param(self_proc, PARAM_IDX["lfo freq (Hz)"], f1)
   end
   
   local t1 = t0 + dt
