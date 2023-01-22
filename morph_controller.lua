@@ -89,7 +89,7 @@ function dsp_params()
   end
   
   add_param(output,  { ["type"] = "input", name = "shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
-  add_param(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 10, default = 0.1, logarithmic = true })
+  add_param(output,  { ["type"] = "input", name = "freq (Hz)", min = 0.001, max = 20, default = 0.1, logarithmic = true })
   add_param(output,  { ["type"] = "input", name = "beat div", min = 0, max = 10, default = 1, enum = true, scalepoints = { 
     ["1/1"] = 0.25,
     ["1/2"] = 0.5,
@@ -282,6 +282,7 @@ function do_the_lfo(n_samples, verbose)
     local tm = Temporal.TempoMap.read()
     local bpm = tm:quarters_per_minute_at(tnow)
     f1 = bpm / 60 * proc_beat
+    ARDOUR.LuaAPI.set_processor_param(self_proc, PARAM_IDX["freq (Hz)"], f1)
   end
   
   local t1 = t0 + dt
