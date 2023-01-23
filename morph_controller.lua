@@ -8,8 +8,7 @@ ardour {
 }
 
 MAX_TARGETS = 8
-
-MEMORY_PER_TARGET = 9
+MEMORY_PER_TARGET = 10
 
 CTRL_IDX = {}
 PARAM_IDX = {}
@@ -50,12 +49,19 @@ function dsp_configure(ins, outs)
   --   7: ctrl_idx tn_ct
   --   8: ctrl_idx tnlin
   --   9: is enabled?
+  --   10: target exists?
   -- all of these are needed because this is the only (?) way to get arrays of data to the graphics render_inline function
   -- it _seems_ that single variables in the global scope can make it across, but not lua tables
   -- Scratch that!  A snapshot of global state is given to render_inline upon gui creation, but the values are not updated.
   -- shmem() and CtrlPorts are the only ways to get live data to render_inline
+  
+  -- REMEMBER to update MEMORY_PER_TARGET if adding new variables here
+  
   self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
   self:shmem():clear()
+  
+  
+  
 end
 
 function add_param(output, cfg)
@@ -161,6 +167,17 @@ function find_targets()
 end
 
 
+-- check the nth param of target.  If it is a valid parameter, then return its description.  Otherwise, return nil
+function get_check_param(target, nth_param)
+  if target:isnil() then return nil end
+  plug = target:to_insert():plugin(0)
+  if nth_param > plug:parameter_count() - 1 or nth_param < 0 then
+    return nil
+  end
+  _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
+  return pd
+end
+
 
 -- Look through all of a target's control points to find the minimum and maximum.
 -- This is used for scaling the output displays.
@@ -182,7 +199,7 @@ end
 -- Store values in memory so that render_inline can have access to these things.
 -- Many of these are in global scope but are stored in lua tables which don't seem to be globally accessible from render_inline
 
-function store_values_memory(t, value, param_lower, param_upper, logarithmic, valid)  
+function store_values_memory(t, value, param_lower, param_upper, logarithmic, valid, target_exists)  
   settings_min, settings_max = get_min_max(t)
   local ctrl = CtrlPorts:array()
   local start = t*MEMORY_PER_TARGET
@@ -206,6 +223,8 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
   else
     shmem[start+9] = 0
   end
+  
+  shmem[start+10] = target_exists
 end
 
 
@@ -289,18 +308,29 @@ function do_the_morph(verbose)
         print(t, plugin_id, nth_param, target, locator)
       end
     end
-    if target and nth_param >= 0 then
-      -- this silently fails if nth_param is not a valid input parameter for the target processor
-      _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-      interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
-      store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1)
-      if enabled then
-        if locator and locator:to_insert():enabled() then
-          ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
+    if target then
+      local interped
+      local pd = get_check_param(target, nth_param)
+      if pd then
+        interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
+        
+        -- target exists and is valid
+        store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1, 1)
+        
+        if enabled then
+          if locator and locator:to_insert():enabled() then
+            ARDOUR.LuaAPI.set_processor_param(target, nth_param, interped)
+          end
         end
+      
+      else
+        -- target exists but is not valid
+        store_values_memory(t, 0, 0, 0, 0, 0, 1)
       end
     else
-      store_values_memory(t, 0, 0, 0, 0, 0)
+    
+      -- target does not exist
+      store_values_memory(t, 0, 0, 0, 0, 0, 0)
     end
   end
 end
@@ -432,15 +462,16 @@ local txt = nil -- cache font description (in GUI context)
 
 function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   
-  local start_shmem = t*MEMORY_PER_TARGET + 1
+  local start_shmem = t*MEMORY_PER_TARGET
   
-  local value = state[start_shmem + 0]
-  local minval = state[start_shmem + 1]
-  local maxval = state[start_shmem + 2]
-  local logarithmic = state[start_shmem + 3] > 0.5
-  local valid = state[start_shmem + 4] > 0.5
-  local ctrl_pid = state[start_shmem + 5]
-  local enabled = state[start_shmem + 8] > 0.5
+  local value = state[start_shmem + 1]
+  local minval = state[start_shmem + 2]
+  local maxval = state[start_shmem + 3]
+  local logarithmic = state[start_shmem + 4] > 0.5
+  local valid = state[start_shmem + 5] > 0.5
+  local ctrl_pid = state[start_shmem + 6]
+  local enabled = state[start_shmem + 9] > 0.5
+  local target_exists = state[start_shmem + 10] > 0.5
   
   local plugin_id = math.floor(ctrl[ctrl_pid])
   
@@ -493,11 +524,17 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
     ctx:stroke()
   end
   
-  if not valid then
+  
+  if target_exists and not valid then
+    ctx:rectangle(tx, ty, w, h)
+    ctx:set_source_rgba(0.5, 0.1, 0.1, 0.5)
+    ctx:fill()
+  end
+  if not target_exists then
     ctx:rectangle(tx, ty, w, h)
     ctx:set_source_rgba(0.1, 0.1, 0.1, 0.5)
     ctx:fill()
-  end
+  end  
   if not enabled then
     ctx:rectangle(tx, ty, w, h)
     ctx:set_source_rgba(0.5, 0.5, 0.5, 0.5)
@@ -511,17 +548,18 @@ end
 
 function visualize_single(t, w, h, ctx, txt, ctrl, state)
   
-  local start_shmem = t*MEMORY_PER_TARGET + 1
+  local start_shmem = t*MEMORY_PER_TARGET
   
-  local value = state[start_shmem + 0]
-  local minval = state[start_shmem + 1]
-  local maxval = state[start_shmem + 2]
-  local logarithmic = state[start_shmem + 3] > 0.5
-  local valid = state[start_shmem + 4] > 0.5
-  local ctrl_pid = state[start_shmem + 5]
-  local ctrl_ct = state[start_shmem + 6]
-  local ctrl_lin = state[start_shmem + 7]
-  local enabled = state[start_shmem + 8] > 0.5
+  local value = state[start_shmem + 1]
+  local minval = state[start_shmem + 2]
+  local maxval = state[start_shmem + 3]
+  local logarithmic = state[start_shmem + 4] > 0.5
+  local valid = state[start_shmem + 5] > 0.5
+  local ctrl_pid = state[start_shmem + 6]
+  local ctrl_ct = state[start_shmem + 7]
+  local ctrl_lin = state[start_shmem + 8]
+  local enabled = state[start_shmem + 9] > 0.5
+  local target_exists = state[start_shmem + 10] > 0.5
   
   local plugin_id = math.floor(ctrl[ctrl_pid])
   local r,g,b = 1, 1, 1
@@ -612,7 +650,12 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     ctx:stroke()
   end
   
-  if not valid then
+  if target_exists and not valid then
+    ctx:rectangle(0, 0, w, h)
+    ctx:set_source_rgba(0.5, 0.1, 0.1, 0.5)
+    ctx:fill()
+  end
+  if not target_exists then
     ctx:rectangle(0, 0, w, h)
     ctx:set_source_rgba(0.1, 0.1, 0.1, 0.5)
     ctx:fill()
