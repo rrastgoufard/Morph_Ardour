@@ -239,6 +239,9 @@ function get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
   scaled = value * (count - 1)
   lower_idx = math.floor(scaled)
   upper_idx = lower_idx + 1
+  
+  upper_idx = math.min(upper_idx, count - 1) -- ignoring this causes a problem when value == 1
+  
   lower_value = ctrl[ctrl_ct+lower_idx+1]
   upper_value = ctrl[ctrl_ct+upper_idx+1]
   
@@ -250,7 +253,7 @@ function get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
   
   if pd.logarithmic then
     lower_value = math.log(lower_value) / math.log(10)
-    lower_value = math.log(upper_value) / math.log(10)
+    upper_value = math.log(upper_value) / math.log(10)
   end
   interped = (1-percentage)*lower_value + percentage*upper_value
   if pd.logarithmic then
@@ -523,6 +526,10 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     pd.lower = minval
     pd.upper = maxval
     pd.logarithmic = logarithmic
+    if logarithmic then 
+      minval = math.log(minval) / math.log(10)
+      maxval = math.log(maxval) / math.log(10)
+    end    
     
     local padH = 5
     local padW = 5
@@ -536,6 +543,9 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
       local trackvalue = x / W
       local interped = get_interp(trackvalue, ctrl_ct, ctrl_lin, pd)
       local scaled
+      if logarithmic then 
+        interped = math.log(interped) / math.log(10)
+      end      
       if maxval - minval > 0 then
         scaled = (interped - minval) / (maxval - minval)
       else
@@ -549,6 +559,9 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     
     local interped = get_interp(ctrl[1], ctrl_ct, ctrl_lin, pd)
     local scaled
+    if logarithmic then 
+      interped = math.log(interped) / math.log(10)
+    end
     if maxval - minval > 0 then
       scaled = (interped - minval) / (maxval - minval)
     else
