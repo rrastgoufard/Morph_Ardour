@@ -7,20 +7,35 @@ ardour {
   description = [[generalized Morph for controlling multiple automation lanes.  This processor contains multiple lanes and needs to be coupled with the Session Script morph_lane_linker.lua as well as Morph Locator plugins.]]
 }
 
+-- how many targets are available in a single Controller
+-- while this is variable technically, the UI overview is hard-coded to 8
 MAX_TARGETS = 8
+
+-- how many numerical values per target need to be passed to the UI
 MEMORY_PER_TARGET = 10
 
+-- how many characters (represented as ints) will be passed to the UI
+CHARACTERS_PER_TARGET = 32
+
+-- knowing which parameter ctrl[idx] points to is tricky, so create index arrays that allow access by name
+-- ctrl[CTRL_IDX["param name"]] will pull the correct ctrl value
+-- set_processor_param(target, PARAM_IDX["param name"], value) also will do the right thing
+-- They are offset by 1 due to lua tables (ctrl being one of them) starting at index 1
 CTRL_IDX = {}
 PARAM_IDX = {}
 PARAM_COUNT = 0
 
+-- internal variables to keep track of state
 local sample_rate = 0
 local targets = {}
 local locators = {}
+local parameter_names = {}
 local self_proc = -1
 
+-- keep track of frame rate so that UI is not drawn needlessly
 local samples_since_draw = 0
 local samples_per_draw = 0
+local FPS = 25
 
 function dsp_ioconfig()
   return {
@@ -31,7 +46,7 @@ end
 
 function dsp_init(rate)
   sample_rate = rate
-  samples_per_draw = math.floor(rate / 25)
+  samples_per_draw = math.floor(rate / FPS)
   samples_since_draw = samples_per_draw
 end
 
@@ -57,13 +72,11 @@ function dsp_configure(ins, outs)
   
   -- REMEMBER to update MEMORY_PER_TARGET if adding new variables here
   
-  self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
-  self:shmem():clear()
-  
-  
-  
+  self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS + CHARACTERS_PER_TARGET*MAX_TARGETS)
+  self:shmem():clear()  
 end
 
+-- helper function for creating named parameters
 function add_param(output, cfg)
   
   -- this line is sufficient for creating the parameters
@@ -170,12 +183,14 @@ end
 -- check the nth param of target.  If it is a valid parameter, then return its description.  Otherwise, return nil
 function get_check_param(target, nth_param)
   if target:isnil() then return nil end
+  param_name = ""
   plug = target:to_insert():plugin(0)
   if nth_param > plug:parameter_count() - 1 or nth_param < 0 then
-    return nil
+    return nil, param_name
   end
   _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
-  return pd
+  param_name = plug:parameter_label(nth_param)
+  return pd, param_name
 end
 
 
@@ -194,6 +209,30 @@ function get_min_max(t)
     settings_max = math.max(settings_max, ctrl[start+1+i])
   end
   return settings_min, settings_max
+end
+
+
+-- helper functions for writing strings to shared memory
+-- and then reading them back.
+-- We assume exactly 1 string is available per target and that it can have a maximum length of 32 characters
+
+function write_string_to_memory(t, s)
+  local memint = self:shmem():to_int(0):array()
+  local start = MAX_TARGETS*MEMORY_PER_TARGET + t*CHARACTERS_PER_TARGET
+  local s32 = string.format("%32s", s)
+  for i=1,CHARACTERS_PER_TARGET do
+    memint[start+i] = string.byte(s32,i)
+  end
+end
+
+function read_string_from_memory(t)
+  local memint = self:shmem():to_int(0):array()
+  local start = MAX_TARGETS*MEMORY_PER_TARGET + t*CHARACTERS_PER_TARGET
+  local s = ""
+  for i = 1,CHARACTERS_PER_TARGET do
+    s = s .. string.char(memint[start+i])
+  end
+  return s:match("^%s*(.-)%s*$") -- trim any spaces at beginning or end
 end
 
 -- Store values in memory so that render_inline can have access to these things.
@@ -225,6 +264,12 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
   end
   
   shmem[start+10] = target_exists
+  
+  if valid > 0 then 
+    write_string_to_memory(t, parameter_names[t])
+  else 
+    write_string_to_memory(t, "") 
+  end
 end
 
 
@@ -310,7 +355,8 @@ function do_the_morph(verbose)
     end
     if target then
       local interped
-      local pd = get_check_param(target, nth_param)
+      local pd, param_name = get_check_param(target, nth_param)
+      parameter_names[t] = param_name
       if pd then
         interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
         
@@ -485,7 +531,7 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   local cap = 10
   local barheight = h - th - cap
   
-  if valid then
+  if valid then  
     if logarithmic then 
       value = math.log(value) / math.log(10)
       minval = math.log(minval) / math.log(10)
@@ -563,15 +609,25 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
   
   local plugin_id = math.floor(ctrl[ctrl_pid])
   local r,g,b = 1, 1, 1
+  local padH = 5
+  local padW = 5
   
   txt:set_text(string.format("t%d | %d", t, plugin_id));
-  
   local tw, th = txt:get_pixel_size()
-  ctx:set_source_rgba(r, g, b, 1.0)
-  ctx:move_to(w/2 - tw/2, h - th)
-  txt:show_in_cairo_context(ctx)
   
   if valid then
+  
+    r, g, b = hsv_to_rgb(plugin_id/128*360)
+    ctx:rectangle(0, h-th, w/4, th)
+    ctx:set_source_rgba(r, g, b, 1)
+    ctx:fill()
+  
+    txt:set_text(read_string_from_memory(t))
+    tw, th = txt:get_pixel_size()
+    ctx:move_to(0 + padW, h - 2*th - 1) -- left align this text
+    ctx:set_source_rgba(1, 1, 1, 1)
+    txt:show_in_cairo_context(ctx)
+  
     r, g, b = 0.5, 0.5, 0.5
     local pd = {}
     pd.lower = minval
@@ -582,10 +638,8 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
       maxval = math.log(maxval) / math.log(10)
     end    
     
-    local padH = 5
-    local padW = 5
     local W = w - 2*padW
-    local H = h - th
+    local H = h - 2*th - padH
     
     -- interpolate the path that the parameter will take over [0,1]
     ctx:set_line_width(1)
@@ -649,6 +703,12 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     ctx:rel_line_to(0, 0)
     ctx:stroke()
   end
+  
+  txt:set_text(string.format("t%d | %d", t, plugin_id));
+  tw, th = txt:get_pixel_size()
+  ctx:set_source_rgba(1, 1, 1, 1.0)
+  ctx:move_to(5*w/8 - tw/2, h - th) -- center this to the right of a w/4 colored block
+  txt:show_in_cairo_context(ctx)
   
   if target_exists and not valid then
     ctx:rectangle(0, 0, w, h)
