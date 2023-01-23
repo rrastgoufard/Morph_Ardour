@@ -52,6 +52,8 @@ function dsp_configure(ins, outs)
   --   9: is enabled?
   -- all of these are needed because this is the only (?) way to get arrays of data to the graphics render_inline function
   -- it _seems_ that single variables in the global scope can make it across, but not lua tables
+  -- Scratch that!  A snapshot of global state is given to render_inline upon gui creation, but the values are not updated.
+  -- shmem() and CtrlPorts are the only ways to get live data to render_inline
   self:shmem():allocate(MEMORY_PER_TARGET*MAX_TARGETS)
   self:shmem():clear()
 end
@@ -303,6 +305,9 @@ function do_the_morph(verbose)
   end
 end
 
+
+-- keep track of LFO state at all times, but only write the value to ctrl["Controller"] if Use LFO is enabled
+
 local t0 = 0
 local v0 = 0.5
 local a0 = 0
@@ -421,6 +426,10 @@ end
 
 local txt = nil -- cache font description (in GUI context)
 
+
+-- Draw a bar corresponding to a target within the space allowed (top left corner is tx, ty, bottom right is tx+w, ty+h)
+-- This is called 8 times, once for each of the Controller's targets, to provide an overview of all targets simultaneously
+
 function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   
   local start_shmem = t*MEMORY_PER_TARGET + 1
@@ -495,6 +504,10 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
     ctx:fill()
   end
 end
+
+
+-- This draw call visualizes a single target's state in detail.
+-- It interpolates through the entire range to create a plot of how the parameter will change
 
 function visualize_single(t, w, h, ctx, txt, ctrl, state)
   
