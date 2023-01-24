@@ -4,7 +4,7 @@ ardour {
   category    = "Utility",
   license     = "MIT",
   author      = "RR",
-  description = [[generalized Morph for controlling multiple automation lanes.  This processor contains multiple lanes and needs to be coupled with the Session Script morph_lane_linker.lua as well as Morph Locator plugins.]]
+  description = [[generalized Morph for controlling multiple automation lanes.  This processor contains multiple lanes and uses Morph Locators to target desired plugins.]]
 }
 
 -- how many targets are available in a single Controller
@@ -182,14 +182,30 @@ end
 
 -- check the nth param of target.  If it is a valid parameter, then return its description.  Otherwise, return nil
 function get_check_param(target, nth_param)
+
   if target:isnil() then return nil end
   param_name = ""
   plug = target:to_insert():plugin(0)
-  if nth_param > plug:parameter_count() - 1 or nth_param < 0 then
-    return nil, param_name
-  end
-  _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
+  
+  -- check bounds for valid parameter
+  belowmin = nth_param < 0
+  abovemax = nth_param > plug:parameter_count() - 1
+  if belowmin or abovemax then return nil, param_name end
+  
   param_name = plug:parameter_label(nth_param)
+  
+  -- now that bounds have been met, ensure that parameter is input
+  iscontrol = plug:parameter_is_control(nth_param)
+  if not iscontrol then return nil, param_name end
+  
+  isinput = plug:parameter_is_input(nth_param)
+  if not isinput then return nil, param_name end
+  
+  -- at this point, all possible checks have passed, so try to read the descriptor and label
+--   _, _, pd = ARDOUR.LuaAPI.plugin_automation(target, nth_param)
+  _, pdd = plug:get_parameter_descriptor(nth_param, ARDOUR.ParameterDescriptor())
+  pd = pdd[2]
+  
   return pd, param_name
 end
 
@@ -265,11 +281,7 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
   
   shmem[start+10] = target_exists
   
-  if valid > 0 then 
-    write_string_to_memory(t, parameter_names[t])
-  else 
-    write_string_to_memory(t, "") 
-  end
+  write_string_to_memory(t, parameter_names[t])
 end
 
 
@@ -374,8 +386,8 @@ function do_the_morph(verbose)
         store_values_memory(t, 0, 0, 0, 0, 0, 1)
       end
     else
-    
       -- target does not exist
+      parameter_names[t] = ""
       store_values_memory(t, 0, 0, 0, 0, 0, 0)
     end
   end
@@ -615,18 +627,18 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
   txt:set_text(string.format("t%d | %d", t, plugin_id));
   local tw, th = txt:get_pixel_size()
   
+  txt:set_text(read_string_from_memory(t))
+  tw, th = txt:get_pixel_size()
+  ctx:move_to(0 + padW, h - 2*th - 1) -- left align this text
+  ctx:set_source_rgba(1, 1, 1, 1)
+  txt:show_in_cairo_context(ctx)
+  
   if valid then
   
     r, g, b = hsv_to_rgb(plugin_id/128*360)
     ctx:rectangle(0, h-th, w/4, th)
     ctx:set_source_rgba(r, g, b, 1)
     ctx:fill()
-  
-    txt:set_text(read_string_from_memory(t))
-    tw, th = txt:get_pixel_size()
-    ctx:move_to(0 + padW, h - 2*th - 1) -- left align this text
-    ctx:set_source_rgba(1, 1, 1, 1)
-    txt:show_in_cairo_context(ctx)
   
     r, g, b = 0.5, 0.5, 0.5
     local pd = {}
@@ -763,6 +775,7 @@ function render_inline(ctx, w, max_h)
       draw_target(t, tx, ty, w/NCOLS, h/NROWS, ctx, txt, ctrl, state)
     end
   else
+    -- note: this crashes the UI if visualize is set to a non-integer
     visualize_single(ctrl[2], w, h, ctx, txt, ctrl, state)
   end
   

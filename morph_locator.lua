@@ -126,17 +126,15 @@ function print_parameters(proc, start_param, end_param)
       return
     end
     
-    if plug:parameter_is_control(j) then
-      local label = plug:parameter_label(j)
+    local label = plug:parameter_label(j)
+    if plug:parameter_is_input(j) then
       local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
       local pd = descriptor_table[2]
-      if plug:parameter_is_input(j) then
-        print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
-      else
-        print("       ", " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
-      end
-      printing_params_found = printing_params_found + 1
+      print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
+    else
+      print("       ", " ", label)
     end
+    printing_params_found = printing_params_found + 1
   end
   printing_current_param = end_param + 1
 end
@@ -182,9 +180,9 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
   samples_since_last_draw = samples_since_last_draw + n_samples
   if samples_since_last_draw > samples_per_draw then
     samples_since_last_draw = samples_since_last_draw % samples_per_draw
-    if not (last_id == ctrl[1]) or not (last_valid == valid) then
+--     if not (last_id == ctrl[1]) or not (last_valid == valid) then
       self:queue_draw()
-    end
+--     end
     last_id = ctrl[1]
     last_valid = valid
   end
