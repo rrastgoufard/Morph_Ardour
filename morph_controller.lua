@@ -137,6 +137,23 @@ function dsp_params()
 end
 
 
+
+-- Ardour's get/set_processor_param work on control parameters only, but getting names must be done while counting ALL parameters.
+-- Whenever we encounter a new processor ID, build its mapping.
+control_count_to_param_count = {}
+
+function build_control_count_to_param_count(id, plug)
+  control_count_to_param_count[id] = {}
+  control_count = 0
+  for param_count = 0, plug:parameter_count() - 1 do
+    if plug:parameter_is_control(param_count) then
+      control_count_to_param_count[id][control_count] = param_count
+      control_count = control_count + 1
+    end
+  end
+end
+
+
 -- the following two functions look through all routes to find Locators.
 -- If a Locator is found with an ID that this Controller cares about, then save it and the following processor for later access.
 
@@ -150,6 +167,11 @@ function add_target(locator_id, proc, nextproc)
         targets[i] = nil
       else
         targets[i] = nextproc
+        local plug = nextproc:to_insert():plugin(0)
+        local id = plug:id():to_s()
+        if not control_count_to_param_count[id] then
+          build_control_count_to_param_count(id, plug)
+        end
       end
     end
   end
@@ -158,6 +180,7 @@ end
 function find_targets()
   targets = {} -- reset all targets
   locators = {} -- reset all locators
+  control_count_to_param_count = {}
   
   for r in Session:get_routes():iter() do
     local i = 0 -- keep track of plugin index on this route
@@ -181,11 +204,15 @@ end
 
 
 -- check the nth param of target.  If it is a valid parameter, then return its description.  Otherwise, return nil
-function get_check_param(target, nth_param)
+function get_check_param(target, nth_param_control)
 
   if target:isnil() then return nil end
   param_name = ""
   plug = target:to_insert():plugin(0)
+  id = plug:id():to_s()
+  nth_param = control_count_to_param_count[id][nth_param_control]
+  
+  if not nth_param then return nil, param_name end
   
   -- check bounds for valid parameter
   belowmin = nth_param < 0

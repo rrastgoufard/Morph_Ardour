@@ -127,14 +127,16 @@ function print_parameters(proc, start_param, end_param)
     end
     
     local label = plug:parameter_label(j)
-    if plug:parameter_is_input(j) then
-      local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
-      local pd = descriptor_table[2]
-      print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
-    else
-      print("       ", " ", label)
+    if plug:parameter_is_control(j) then
+      if plug:parameter_is_input(j) then
+        local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
+        local pd = descriptor_table[2]
+        print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
+      else
+        print("       ", " ", label)
+      end
+      printing_params_found = printing_params_found + 1
     end
-    printing_params_found = printing_params_found + 1
   end
   printing_current_param = end_param + 1
 end
