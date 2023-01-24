@@ -52,17 +52,15 @@ function factory()
     plug = proc:to_insert():plugin(0)
     param_count = 0
     for j = 0, plug:parameter_count() - 1 do
-      if plug:parameter_is_control(j) then
-        local label = plug:parameter_label(j)
+      local label = plug:parameter_label(j)
+      if plug:parameter_is_input(j) then
         local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
         local pd = descriptor_table[2]
-        if plug:parameter_is_input(j) then
-          print("     ", param_count, " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
-        else
-          print("       ", " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
-        end
-        param_count = param_count + 1
+        print("     ", param_count, " ", label, pd.lower, pd.upper, ", logarithmic =", pd.logarithmic)
+      else
+        print("       ", " ", label)
       end
+      param_count = param_count + 1
     end
   end    
   
