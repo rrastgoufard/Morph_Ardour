@@ -18,22 +18,40 @@ As it stands currently, the "plugin" consists of two pieces of lua code, one bei
 Note that Press to Describe needs a new version of Ardour (7.2-128-g7e4bb2ff68 or later) in order for its messages to be printed successfully.  https://tracker.ardour.org/view.php?id=9202
 
 2.  morph_controller.lua has a large number of parameters.  
-    - Controller: the controller value that slides between 0 and 1.  
-    - Visualize: choose to visualize an overview of all target outputs by setting to -1, or choose a specific target by setting in the range of 0 to 7.
-    - Control Mode: choose one of Manual, Use LFO, or Audio Input.  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
-    - lfo shape: choose between sine and saw
-    - lfo freq (Hz): the speed of the LFO in cycles per second
-    - lfo beat div: the speed of the LFO in terms of the current transport location's tempo.  Can specify the speed of a whole measure (1/1), half measure (1/2), quarter note (1/4), quarter note triplet (1/4T), etc.
-    - lfo speed mode: choose to use freq (Hz) or beat div when determining LFO speed
-    - lfo phase (deg): the starting phase of the LFO
-    - lfo reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO to be stopped at the configured phase.  [![](https://img.youtube.com/vi/JN4jlhjcwRE/0.jpg)](https://youtu.be/JN4jlhjcwRE "Morph Controller with LFO for Ardour")
-    - The remaining 14 parameters are replicated once for each of 8 targets.  
-    - The __target_plugin_id parameter should be set to the same value as the locator_ID of a Morph Locator in order to control the target.  
-    - The parameter __target_nth_param determines which of the target's parameters is to be controlled.  
-    - The __target_enabled parameter determines whether this target's automation is controlled or not.  
-    - The __target_linear parameter allows switching between linear interpolation or discrete selection when going through different values.  Using discrete will allow step sequencing.
-    - The remaining parameters store up to 10 values for the target automation lane, and the target_control_point_count parameter dictates how many of those 10 values are interpolated between as the main controller slides between 0 and 1.
-    - Note: the parameter names have been shortened so that more parameters fit on the screen in Ardour's generic UI.  con, ti_ct for count, ti_c0, ti_c1, ..., ti_c9, ti_pid, ti_nth, ti_ena, and ti_lin
+
+Controller: the controller value that slides between 0 and 1.  
+
+Visualize: choose to visualize an overview of all target outputs by setting to -1, or choose a specific target by setting in the range of 0 to 7.
+
+Control Mode: choose one of Manual, Use LFO, or Audio Input.  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
+
+lfo shape: choose between sine and saw
+
+lfo freq (Hz): the speed of the LFO in cycles per second
+
+lfo beat div: the speed of the LFO in terms of the current transport location's tempo.  Can specify the speed of a whole measure (1/1), half measure (1/2), quarter note (1/4), quarter note triplet (1/4T), etc.
+
+lfo speed mode: choose to use freq (Hz) or beat div when determining LFO speed
+
+lfo phase (deg): the starting phase of the LFO
+
+lfo reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO to be stopped at the configured phase.  
+
+[![](https://img.youtube.com/vi/JN4jlhjcwRE/0.jpg)](https://youtu.be/JN4jlhjcwRE "Morph Controller with LFO for Ardour")
+
+The remaining 14 parameters are replicated once for each of 8 targets.  
+
+The __target_plugin_id parameter should be set to the same value as the locator_ID of a Morph Locator in order to control the target.  
+
+The parameter __target_nth_param determines which of the target's parameters is to be controlled.  
+
+The __target_enabled parameter determines whether this target's automation is controlled or not.  
+
+The __target_linear parameter allows switching between linear interpolation or discrete selection when going through different values.  Using discrete will allow step sequencing.
+
+The remaining parameters store up to 10 values for the target automation lane, and the target_control_point_count parameter dictates how many of those 10 values are interpolated between as the main controller slides between 0 and 1.
+
+Note: the parameter names have been shortened so that more parameters fit on the screen in Ardour's generic UI.  con, ti_ct for count, ti_c0, ti_c1, ..., ti_c9, ti_pid, ti_nth, ti_ena, and ti_lin
     
 
 ## "Installation"
