@@ -119,5 +119,7 @@ I am really enjoying my time with Ardour!  Music is fun.
 Here's a link to the repo where you can find the lua plugins.  https://github.com/rrastgoufard/Morph_Ardour
 
 And here are links to the two threads on Ardour's forums.
+
 Original -- https://discourse.ardour.org/t/morph-plugin-for-controlling-automation/108184
+
 Version 2 -- https://discourse.ardour.org/t/morph-controller-ver2-for-controlling-automation/108231
