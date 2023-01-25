@@ -68,15 +68,22 @@ The main difference is that now the two plugins are DSP processors.  This brings
 Here are some demos of Morph Controller (ver2) in action.
 
 Overview of a session with audio.  (Audio starts immediately and is loud.)
+
 [![](https://img.youtube.com/vi/QJV8wmCUhhQ/0.jpg)](https://youtu.be/QJV8wmCUhhQ "Morph Controller (ver2) for Ardour")
 
+
 Demo of exporting a session.  (No audio.)
+
 [![](https://img.youtube.com/vi/yrHkwRv3eDk/0.jpg)](https://youtu.be/yrHkwRv3eDk "Morph Controller (ver2) for Ardour -- Export Demonstration")
 
+
 Demo of Press to Describe.  (No audio.)
+
 [![](https://img.youtube.com/vi/tiKa0oby4xU/0.jpg)](https://youtu.be/tiKa0oby4xU "Morph Controller (ver2) for Ardour -- Demonstration of Press to Describe")
 
+
 Demo of Audio Input.  (Audio starts immediately.)
+
 [![](https://img.youtube.com/vi/7RXJHe8YjVM/0.jpg)](https://youtu.be/7RXJHe8YjVM "Morph Controller (ver2) for Ardour -- Audio Input")
 
 
