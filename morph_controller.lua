@@ -37,6 +37,9 @@ local samples_since_draw = 0
 local samples_per_draw = 0
 local FPS = 25
 
+local n_audio = -1  -- n_audio will be a simple integer
+local n_out = -1 -- n_out will be a lua object
+
 function dsp_ioconfig()
   return {
     {audio_in = -1, audio_out = -1, midi_in = 1, midi_out = 1},
@@ -53,6 +56,7 @@ end
 function dsp_configure(ins, outs)
   assert (ins:n_audio() == outs:n_audio())
   n_out = outs
+  n_audio = ins:n_audio()
   
   -- keep track of 
   --   1: interpolated value
@@ -94,6 +98,11 @@ function dsp_params()
   local output = {}
   add_param(output, { ["type"] = "input", name = "Controller", min = 0, max = 1, default = 0 } )
   add_param(output, { ["type"] = "input", name = "Visualize", min = -1, max = 7, default = -1, integer = true } )
+  add_param(output,  { ["type"] = "input", name = "Control Mode", min = 0, max = 2, default = 0, integer = true, enum = true, scalepoints = {
+    ["Manual"] = 0,
+    ["Use LFO"] = 1,
+    ["Audio Input"] = 2,
+  }})
   
   add_param(output,  { ["type"] = "input", name = "lfo shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
   add_param(output,  { ["type"] = "input", name = "lfo freq (Hz)", min = 0.001, max = 20, default = 0.1, logarithmic = true })
@@ -110,7 +119,6 @@ function dsp_params()
   add_param(output,  { ["type"] = "input", name = "lfo mode", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["freq (Hz)"] = 0, ["beat div"] = 1} })
   add_param(output,  { ["type"] = "input", name = "lfo phase (deg)", min = 0, max = 360, default = 0 })
   add_param(output,  { ["type"] = "input", name = "lfo reset", min = 0, max = 1, default = 0, integer = true })
-  add_param(output,  { ["type"] = "input", name = "Use LFO?", min = 0, max = 1, default = 0, integer = true, toggled = true })
   
   for i=0, MAX_TARGETS-1 do
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
@@ -436,7 +444,9 @@ function do_the_lfo(n_samples, verbose)
   local proc_speedmode = ctrl[CTRL_IDX["lfo mode"]] > 0.5
   local proc_phase = ctrl[CTRL_IDX["lfo phase (deg)"]]
   local proc_reset = ctrl[CTRL_IDX["lfo reset"]] > 0.5
-  local use_lfo = ctrl[CTRL_IDX["Use LFO?"]] > 0.5
+  
+  local control_mode = ctrl[CTRL_IDX["Control Mode"]]
+  local use_lfo = control_mode > 0.5 and control_mode < 1.5
   
   local f1 = proc_freq
   if proc_speedmode then -- if true, then we're in tempo sync
@@ -498,14 +508,54 @@ function do_the_lfo(n_samples, verbose)
   
 end
 
+-- monitor incoming audio and allow setting the Controller's value based on the peak in every buffer
+function do_the_audio(bufs, in_map, n_samples, offset, verbose)
+  local ctrl = CtrlPorts:array()
+  local control_mode = ctrl[CTRL_IDX["Control Mode"]]
+  local use_audio = control_mode > 1.5 and control_mode < 2.5
+  if not use_audio then return end
+  if n_audio <= 0 then return end -- n_audio is a global parameter
+  
+  if verbose then
+    print("Using Audio Input as Control Mode")
+    print(n_audio, n_samples)
+  end
+  
+  -- calculate the peak value using ARDOUR.DSP.compute_peak
+  -- see https://github.com/Ardour/ardour/blob/master/share/scripts/_dsp_plugin_communication.lua
+  -- and https://github.com/Ardour/ardour/blob/master/share/scripts/scope.lua
+  local ib = in_map:get(ARDOUR.DataType("audio"), 0)
+  if verbose then
+    print("Got input buffer channel 0 ID", ib)
+  end
+  local peak = 0
+  peak = ARDOUR.DSP.compute_peak(bufs:get_audio(ib):data(offset), n_samples, peak)
+  if verbose then
+    print("Computed peak", peak)
+  end
+  
+  -- clip peak to be in [0,1] and set the Controller's value
+  peak = math.min(math.max(peak, 0), 1)
+  ARDOUR.LuaAPI.set_processor_param(self_proc, 0, peak)
+  if verbose then
+    print("Set Controller value to", peak)
+    print()
+  end
+end
+
+n_iter = 0
+
 -- https://github.com/Ardour/ardour/blob/master/share/scripts/_rawmidi.lua
 function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
+  n_iter = n_iter + 1
   ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
   
   if not Session:transport_rolling() then
     find_targets()
   end
+  
   do_the_lfo(n_samples, false)
+  do_the_audio(bufs, in_map, n_samples, offset, false)
   do_the_morph(false)
   
   samples_since_draw = samples_since_draw + n_samples
