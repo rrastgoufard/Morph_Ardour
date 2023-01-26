@@ -39,6 +39,10 @@ lfo reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO t
 
 [![](https://img.youtube.com/vi/JN4jlhjcwRE/0.jpg)](https://youtu.be/JN4jlhjcwRE "Morph Controller with LFO for Ardour")
 
+audio +smooth: time constant for smoothing out changes that increase the Controller's value.  Lower gives faster response.
+
+audio -smooth: time constant for smoothing out changes that decrease the Controller's value.  Lower gives faster response.
+
 The remaining 14 parameters are replicated once for each of 8 targets.  
 
 The __target_plugin_id parameter should be set to the same value as the locator_ID of a Morph Locator in order to control the target.  
@@ -48,6 +52,8 @@ The parameter __target_nth_param determines which of the target's parameters is 
 The __target_enabled parameter determines whether this target's automation is controlled or not.  
 
 The __target_linear parameter allows switching between linear interpolation or discrete selection when going through different values.  Using discrete will allow step sequencing.
+
+The __target_skew parameter skews, bends, or stretches the transfer curve of the parameter.  Easiest to see this in action by setting Visualize to a skewed target.
 
 The remaining parameters store up to 10 values for the target automation lane, and the target_control_point_count parameter dictates how many of those 10 values are interpolated between as the main controller slides between 0 and 1.
 
