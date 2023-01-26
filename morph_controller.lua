@@ -12,7 +12,7 @@ ardour {
 MAX_TARGETS = 8
 
 -- how many numerical values per target need to be passed to the UI
-MEMORY_PER_TARGET = 10
+MEMORY_PER_TARGET = 11
 
 -- how many characters (represented as ints) will be passed to the UI
 CHARACTERS_PER_TARGET = 32
@@ -30,7 +30,7 @@ local sample_rate = 0
 local targets = {}
 local locators = {}
 local parameter_names = {}
-local self_proc = -1
+local self_proc = nil
 
 -- keep track of frame rate so that UI is not drawn needlessly
 local samples_since_draw = 0
@@ -69,6 +69,7 @@ function dsp_configure(ins, outs)
   --   8: ctrl_idx tnlin
   --   9: is enabled?
   --   10: target exists?
+  --   11: ctrl_idx tnskew
   -- all of these are needed because this is the only (?) way to get arrays of data to the graphics render_inline function
   -- it _seems_ that single variables in the global scope can make it across, but not lua tables
   -- Scratch that!  A snapshot of global state is given to render_inline upon gui creation, but the values are not updated.
@@ -120,6 +121,10 @@ function dsp_params()
   add_param(output,  { ["type"] = "input", name = "lfo phase (deg)", min = 0, max = 360, default = 0 })
   add_param(output,  { ["type"] = "input", name = "lfo reset", min = 0, max = 1, default = 0, integer = true })
   
+  add_param(output,  { ["type"] = "input", name = "audio +smooth", min = 0, max = 1, default = 0 })
+  add_param(output,  { ["type"] = "input", name = "audio -smooth", min = 0, max = 1, default = 0 })
+  
+  
   for i=0, MAX_TARGETS-1 do
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_0", min = -99999, max = 99999, default = 0 })
@@ -139,6 +144,7 @@ function dsp_params()
       ["linear"] = 1,
       ["discrete"] = 0,
     }})
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "skew", min = -1, max = 1, default = 0 })
   end
   
   return output
@@ -315,6 +321,7 @@ function store_values_memory(t, value, param_lower, param_upper, logarithmic, va
   end
   
   shmem[start+10] = target_exists
+  shmem[start+11] = CTRL_IDX["t"..t.."skew"]
   
   write_string_to_memory(t, parameter_names[t])
 end
@@ -325,15 +332,56 @@ end
 --    a value, 
 --    the ctrl index of a target's count parameter, 
 --    ctrl index of linear/discrete, 
+--    ctrl index of skew,
 --    and parameter descriptor containing lower, upper, log
 
-function get_interp(value, ctrl_ct, ctrl_lin, pd)
+function get_interp(value, ctrl_ct, ctrl_lin, ctrl_skew, pd)
   local ctrl = CtrlPorts:array()
   
+  local skew = ctrl[ctrl_skew]
+  local mult = 1
+  local skew = skew * mult
+  
+  -- we want to use bezier curve (cubic) to get a nice skew,
+  -- but it's parametric over t.  Inverting it to get x directly seems hard...
+  -- Instead, just guess-and-check several times to get close enough to x
+  local p0 = {["x"] = 0, ["y"] = 0} -- bottom left
+  local p1 = {["x"] = 0, ["y"] = skew } -- "top left" control point
+  local p2 = {["x"] = 1 - skew, ["y"] = 1} -- "top right" control point
+  local p3 = {["x"] = 1, ["y"] = 1} -- top right
+  if skew < 0 then
+    p1 = {["x"] = -skew, ["y"] = 0}
+    p2 = {["x"] = 1, ["y"] = 1 + skew}
+  end
+  
+  -- sweep through t to find closest point to x
+  local x0 = 0
+  local y0 = 0
+  local x1 = 0
+  local y1 = 0
+  local N = 100
+  for T = 0, N do
+    local t = T/N
+    local bx = (1-t)^3*p0.x + 3*(1-t)^2*t*p1.x + 3*(1-t)*t^2*p2.x + t^3*p3.x
+    local by = (1-t)^3*p0.y + 3*(1-t)^2*t*p1.y + 3*(1-t)*t^2*p2.y + t^3*p3.y
+    x1 = bx
+    y1 = by
+    if value >= x0 and value < x1 then
+      local percent = (value - x0) / (x1 - x0)
+      y1 = (y1-y0)*percent + y0
+      break
+    end
+    x0 = x1
+    y0 = y1
+  end
+  
+  skewed = y1
+  skewed = math.min(math.max(skewed, 0), 1)
+  
   if ctrl[ctrl_lin] > 0.5 then
-    return get_interp_linear(value, ctrl_ct, ctrl_lin, pd)
+    return get_interp_linear(skewed, ctrl_ct, ctrl_lin, pd)
   else
-    return get_interp_discrete(value, ctrl_ct, ctrl_lin, pd)
+    return get_interp_discrete(skewed, ctrl_ct, ctrl_lin, pd)
   end
 end
   
@@ -390,6 +438,7 @@ function do_the_morph(verbose)
     
     local ctrl_ct = CTRL_IDX["t"..t.."_ct"]
     local ctrl_lin = CTRL_IDX["t"..t.."lin"]
+    local ctrl_skew = CTRL_IDX["t"..t.."skew"]
     
     local target = targets[t]
     local locator = locators[t]
@@ -405,7 +454,7 @@ function do_the_morph(verbose)
       local pd, param_name = get_check_param(target, nth_param)
       parameter_names[t] = param_name
       if pd then
-        interped = get_interp(value, ctrl_ct, ctrl_lin, pd)
+        interped = get_interp(value, ctrl_ct, ctrl_lin, ctrl_skew, pd)
         
         -- target exists and is valid
         store_values_memory(t, interped, pd.lower, pd.upper, pd.logarithmic, 1, 1)
@@ -508,11 +557,15 @@ function do_the_lfo(n_samples, verbose)
   
 end
 
+local prevpeak = 0
+
 -- monitor incoming audio and allow setting the Controller's value based on the peak in every buffer
 function do_the_audio(bufs, in_map, n_samples, offset, verbose)
   local ctrl = CtrlPorts:array()
   local control_mode = ctrl[CTRL_IDX["Control Mode"]]
   local use_audio = control_mode > 1.5 and control_mode < 2.5
+  local smoothplus = ctrl[CTRL_IDX["audio +smooth"]]
+  local smoothminus = ctrl[CTRL_IDX["audio -smooth"]]
   if not use_audio then return end
   if n_audio <= 0 then return end -- n_audio is a global parameter
   
@@ -534,8 +587,24 @@ function do_the_audio(bufs, in_map, n_samples, offset, verbose)
     print("Computed peak", peak)
   end
   
+  -- smooth out peak based on +smooth and -smooth rates
+  -- also, do it repeatedly so that effect of n_samples is removed
+  -- (this has the effect of keeping peak constant through an entire buffer)
+  local smooth = smoothplus
+  if peak < prevpeak then smooth = smoothminus end
+  smooth = smooth^0.1 -- make the control's 0->1 range more usable
+  for i=1,n_samples do
+    peak = (1-smooth)*peak + smooth*prevpeak
+    prevpeak = peak
+  end
+  
+  if verbose then
+    print("Smoothed peak", peak, "using smoothing", smooth)
+  end
+  
   -- clip peak to be in [0,1] and set the Controller's value
   peak = math.min(math.max(peak, 0), 1)
+  
   ARDOUR.LuaAPI.set_processor_param(self_proc, 0, peak)
   if verbose then
     print("Set Controller value to", peak)
@@ -550,7 +619,7 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
   n_iter = n_iter + 1
   ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
   
-  if not Session:transport_rolling() then
+  if not Session:transport_rolling() or not self_proc then
     find_targets()
   end
   
@@ -695,6 +764,7 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
   local ctrl_lin = state[start_shmem + 8]
   local enabled = state[start_shmem + 9] > 0.5
   local target_exists = state[start_shmem + 10] > 0.5
+  local ctrl_skew = state[start_shmem + 11]
   
   local plugin_id = math.floor(ctrl[ctrl_pid])
   local r,g,b = 1, 1, 1
@@ -735,7 +805,7 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     ctx:set_source_rgba(r, g, b, 1.0)
     for x = 0, W do
       local trackvalue = x / W
-      local interped = get_interp(trackvalue, ctrl_ct, ctrl_lin, pd)
+      local interped = get_interp(trackvalue, ctrl_ct, ctrl_lin, ctrl_skew, pd)
       local scaled
       if logarithmic then 
         interped = math.log(interped) / math.log(10)
@@ -751,7 +821,7 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
     end
     ctx:stroke()
     
-    local interped = get_interp(ctrl[1], ctrl_ct, ctrl_lin, pd)
+    local interped = get_interp(ctrl[1], ctrl_ct, ctrl_lin, ctrl_skew, pd)
     local scaled
     if logarithmic then 
       interped = math.log(interped) / math.log(10)
