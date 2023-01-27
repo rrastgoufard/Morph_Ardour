@@ -110,6 +110,9 @@ Demo of Audio Input.  (Audio starts immediately.)
 
 [![](https://img.youtube.com/vi/7RXJHe8YjVM/0.jpg)](https://youtu.be/7RXJHe8YjVM "Morph Controller (ver2) for Ardour -- Audio Input")
 
+Demo of Audio Input modulating LFO Speed.  (Audio starts immediately.)
+[![](https://img.youtube.com/vi/lLiOCMRXTqY/0.jpg)](https://youtu.be/lLiOCMRXTqY "Morph Controller (ver2) for Ardour -- LFO Speed controlled by Guitar Audio Input")
+
 
 ## Inspirations
 
