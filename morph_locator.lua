@@ -223,10 +223,13 @@ function render_inline(ctx, w, max_h)
   if not txt then
     -- allocate PangoLayout and set font
     --http://manual.ardour.org/lua-scripting/class_reference/#Cairo:PangoLayout
-    txt = Cairo.PangoLayout (ctx, "Mono 16px")
+    txt = Cairo.PangoLayout (ctx, "Mono 12px")
   end  
   
-  local h = w/2
+  txt:set_text(string.format("%d", ctrl[1]));
+  local tw, th = txt:get_pixel_size()
+--   local h = w/2
+  local h = th
   
   -- clear background
   r, g, b = 0.1, 0.1, 0.1
@@ -243,8 +246,6 @@ function render_inline(ctx, w, max_h)
   ctx:set_source_rgba(r, g, b, 1.0)
   ctx:fill()
   
-  txt:set_text(string.format("%d", ctrl[1]));
-  local tw, th = txt:get_pixel_size()
   ctx:set_source_rgba(1, 1, 1, 1.0)
   ctx:move_to(5*w/8 - tw/2, h/2 - th/2)
   txt:show_in_cairo_context(ctx)
