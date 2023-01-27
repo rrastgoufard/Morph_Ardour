@@ -140,11 +140,11 @@ function dsp_params()
     add_param(output, { ["type"] = "input", name = "t" .. i .. "pid", min = -1, max = 127, default = -1, integer = true })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "nth", min = -1, max = 4096, default = -1, integer = true })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "ena", min = 0, max = 1, default = 1, integer = true, toggled = true })
+    add_param(output, { ["type"] = "input", name = "t" .. i .. "skew", min = -1, max = 1, default = 0 })
     add_param(output, { ["type"] = "input", name = "t" .. i .. "lin", min = 0, max = 1, default = 1, integer = true, scalepoints = {
       ["linear"] = 1,
       ["discrete"] = 0,
     }})
-    add_param(output, { ["type"] = "input", name = "t" .. i .. "skew", min = -1, max = 1, default = 0 })
   end
   
   return output
