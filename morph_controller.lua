@@ -195,6 +195,7 @@ function find_targets()
   targets = {} -- reset all targets
   locators = {} -- reset all locators
   control_count_to_param_count = {}
+  collectgarbage() -- is it a bad idea to put this in a loop?
   
   for r in Session:get_routes():iter() do
     local i = 0 -- keep track of plugin index on this route
