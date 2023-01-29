@@ -19,6 +19,7 @@ local last_valid = -1
 
 function dsp_ioconfig()
   return {
+    {audio_in = -1, audio_out = -1, midi_in = 0, midi_out = 0},
     {audio_in = -1, audio_out = -1, midi_in = 1, midi_out = 1},
   }
 end

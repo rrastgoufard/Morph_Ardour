@@ -42,6 +42,7 @@ local n_out = -1 -- n_out will be a lua object
 
 function dsp_ioconfig()
   return {
+    {audio_in = -1, audio_out = -1, midi_in = 0, midi_out = 0},
     {audio_in = -1, audio_out = -1, midi_in = 1, midi_out = 1},
   }
 end
