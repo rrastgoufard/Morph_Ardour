@@ -155,15 +155,17 @@ end
 
 -- Ardour's get/set_processor_param work on control parameters only, but getting names must be done while counting ALL parameters.
 -- Whenever we encounter a new processor ID, build its mapping.
-control_count_to_param_count = {}
+unique_control_count_to_param_count = {}
 
-function build_control_count_to_param_count(id, plug)
-  control_count_to_param_count[id] = {}
-  control_count = 0
-  for param_count = 0, plug:parameter_count() - 1 do
-    if plug:parameter_is_control(param_count) then
-      control_count_to_param_count[id][control_count] = param_count
-      control_count = control_count + 1
+function build_control_count_to_param_count(unique_id, plug)
+  if not unique_control_count_to_param_count[unique_id] then
+    unique_control_count_to_param_count[unique_id] = {}
+    local control_count = 0
+    for param_count = 0, plug:parameter_count() - 1 do
+      if plug:parameter_is_control(param_count) then
+        unique_control_count_to_param_count[unique_id][control_count] = param_count
+        control_count = control_count + 1
+      end
     end
   end
 end
@@ -182,11 +184,6 @@ function add_target(locator_id, proc, nextproc)
         targets[i] = nil
       else
         targets[i] = nextproc
-        local plug = nextproc:to_insert():plugin(0)
-        local id = plug:id():to_s()
-        if not control_count_to_param_count[id] then
-          build_control_count_to_param_count(id, plug)
-        end
       end
     end
   end
@@ -195,7 +192,6 @@ end
 function find_targets()
   targets = {} -- reset all targets
   locators = {} -- reset all locators
-  control_count_to_param_count = {}
   collectgarbage() -- is it a bad idea to put this in a loop?
   
   for r in Session:get_routes():iter() do
@@ -205,6 +201,9 @@ function find_targets()
       if proc:isnil() then break end -- go to next route
       local plug = proc:to_insert():plugin(0)
       local label = plug:label()
+      local unique_id = plug:unique_id() -- unique_id() is a string
+      build_control_count_to_param_count(unique_id, plug)
+      
       if label == "Morph Locator (ver2)" then
         local nextproc = r:nth_plugin(i+1)
         local locator_id = ARDOUR.LuaAPI.get_processor_param(proc, 0)
@@ -225,8 +224,9 @@ function get_check_param(target, nth_param_control)
   if target:isnil() then return nil end
   param_name = ""
   plug = target:to_insert():plugin(0)
-  id = plug:id():to_s()
-  nth_param = control_count_to_param_count[id][nth_param_control]
+--   id = plug:id():to_s() -- plug:id() is an ID
+  local id = plug:unique_id() -- plug:unique_id() is a string
+  nth_param = unique_control_count_to_param_count[id][nth_param_control]
   
   if not nth_param then return nil, param_name end
   
