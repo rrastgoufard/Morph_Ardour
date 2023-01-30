@@ -13,9 +13,11 @@ local n_out = 0
 local samples_per_draw = -1 -- how many samples need to elapse between draw calls
 local samples_since_last_draw = -1 -- how many samples have elapsed since last draw
 
-local last_id = -1
 local valid = 0
-local last_valid = -1
+
+local proc_id = ""
+local proc_params = {}
+local proc_display_string = ""
 
 function dsp_ioconfig()
   return {
@@ -29,7 +31,8 @@ function dsp_init(rate)
   
   -- shared memory will hold whether or not the next
   -- plugin exists
-  self:shmem():allocate(1)
+  -- as well as 32 bytes for some string data
+  self:shmem():allocate(1+32)
   self:shmem():clear()
   
   -- rate is samples/sec
@@ -50,47 +53,79 @@ function dsp_params()
     -- but they start at 1 for ctrl
   
     { ["type"] = "input", name = "locator_ID", min = 0, max = 127, default = 0, integer = true },
-    { ["type"] = "input", name = "Press to Describe", min = 0, max = 1, default = 0, toggled = true },
+
   }
   
   return output
 end
 
-
--- the following code will flash a button several times when pressed.
--- while it is flashing, manual button presses need to be ignored.
-local isflashing = false
-local seconds_flashing = 0
-local T_FLASH = 0.25
-local MAX_FLASHES = 3
-
-local isprinting = false
-local printing_proc = nil
-local printing_current_param = 0
-local printing_params_found = 0
-
-function check_is_flashing_or_printing(proc, n_samples)
-  if isflashing then
-    seconds_flashing = seconds_flashing + n_samples/sample_rate
-    local Ts = seconds_flashing / T_FLASH
-    local remainder = Ts - math.floor(Ts)
-    if remainder <= 0.5 then
-      ARDOUR.LuaAPI.set_processor_param(proc, 1, 1)
-    elseif remainder > 0.5 then
-      ARDOUR.LuaAPI.set_processor_param(proc, 1, 0)
+-- don't check the full range of parameters... this bogs down the dsp processor severely
+-- simply scan through say 10 params per buffer
+local check_param_start = 0
+local check_param_stride = 10
+local ctrl_count = 0
+local param_label = ""
+function check_param_diff(proc)
+  local plug = proc:to_insert():plugin(0)
+  for check_param = check_param_start, check_param_start + check_param_stride - 1 do
+    local j = check_param
+    local N = plug:parameter_count()
+    if j >= N then
+      check_param_start = 0
+      ctrl_count = 0
+      return
     end
-    if seconds_flashing >= MAX_FLASHES*T_FLASH and not isprinting then
-      ARDOUR.LuaAPI.set_processor_param(proc, 1, 0)
-      isflashing = false
-      seconds_flashing = 0
+    if plug:parameter_is_control(j) then
+      ctrl_count = ctrl_count + 1
+      if plug:parameter_is_input(j) then
+        local nowvalue = ARDOUR.LuaAPI.get_processor_param(proc, ctrl_count-1) -- get_processor_param starts at 0
+        local prev = proc_params[ctrl_count]
+        if not (nowvalue == prev) then
+          if prev then
+            param_label = plug:parameter_label(j)
+            proc_display_string = string.format("%d %s", ctrl_count-1, param_label) -- ctrl_count-1 because again get/set_processor_param starts at 0
+          else
+            param_label = "#total"
+            proc_display_string = string.format("%d %s", ctrl_count, param_label) -- here we report the total count, not the ardour-indexed count, so remove the -1
+          end
+        end
+        proc_params[ctrl_count] = nowvalue
+      end
     end
   end
-  
-  if isprinting then
-    -- print_parameters() will set isprinting = false when finished.
---     print_parameters(printing_proc, printing_current_param, printing_current_param + n_samples/4)
-    print_parameters(printing_proc, printing_current_param, printing_current_param + 1)
+  check_param_start = check_param_start + check_param_stride
+end
+
+-- helper functions for writing strings to shared memory
+-- and then reading them back.
+-- We assume exactly 1 string is available per target and that it can have a maximum length of 32 characters
+
+function write_string_to_memory(s)
+  local memint = self:shmem():to_int(0):array()
+  local start = 1
+  local s32 = string.format("%32s", s)
+  for i=1,32 do
+    memint[start+i] = string.byte(s32,i)
   end
+end
+
+function read_string_from_memory()
+  local memint = self:shmem():to_int(0):array()
+  local start = 1
+  local s = ""
+  for i = 1,32 do
+    s = s .. string.char(memint[start+i])
+  end
+  return s:match("^%s*(.-)%s*$") -- trim any spaces at beginning or end
+end
+
+function reset_proc()
+  proc_id = ""
+  proc_params = {}
+  check_param_start = 0
+  check_param_stride = 10
+  ctrl_count = 0
+  param_label = ""
 end
 
 function check_next_proc(proc)
@@ -100,55 +135,24 @@ function check_next_proc(proc)
   valid = 1
   if proc:isnil() then
     valid = 0
+    reset_proc()
+  else
+    local plug = proc:to_insert():plugin(0)
+    local id = plug:id():to_s()
+    if id == proc_id then
+      check_param_diff(proc)
+    else
+      reset_proc()
+      proc_id = id
+    end
   end
   state[1] = valid
-end
-
--- print_parameters is softened so that it only prints
--- from start_param to end_param in a single pass.
--- This helps it to distribute large print jobs over
--- multiple buffers.
-function print_parameters(proc, start_param, end_param)
-  if proc:isnil() then
-    print("Cannot print processor parameters because it is nil")
-    isprinting = false
-    return
-  end
-  plug = proc:to_insert():plugin(0)
-  name = plug:label()
-  if start_param == 0 then 
-    print(name)
-    printing_params_found = 0
-  end
-  
-  for j = start_param, end_param do
-    if j > plug:parameter_count() - 1 then 
-      isprinting = false
-      return
-    end
-    
-    local label = plug:parameter_label(j)
-    if plug:parameter_is_control(j) then
-      if plug:parameter_is_input(j) then
-        local _, descriptor_table = plug:get_parameter_descriptor(j, ARDOUR.ParameterDescriptor())
-        local pd = descriptor_table[2]
-        print("     ", printing_params_found, " ", label, "| min =", pd.lower, ", max =", pd.upper, ", log =", pd.logarithmic)
-      else
-        print("       ", " ", label)
-      end
-      printing_params_found = printing_params_found + 1
-    end
-  end
-  printing_current_param = end_param + 1
+  write_string_to_memory(proc_display_string)
+  collectgarbage()
 end
 
 
-
--- https://github.com/Ardour/ardour/blob/master/share/scripts/_rawmidi.lua
-function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
-  ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
-  
-  local ctrl = CtrlPorts:array()
+function check_self()  
   
   -- morph locator only needs to look at its own route
   local r = self:route()
@@ -162,32 +166,23 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
     local id = plug:id():to_s()
     
     if id == self:id():to_s() then        
-      -- this triggers when "Press to Describe" is pressed
-      if ctrl[2] > 0.5 and not isflashing and not isprinting then
-        local routename = r:name()
-        print()
-        print(string.format("Hi!  I am a Morph Locator (ver2), plugin %d on %s, with ID=%d", i+1, routename, ctrl[1]))
-        isflashing = true
-        isprinting = true
-        printing_proc = r:nth_plugin(i+1)
-        printing_current_param = 0
-      end
-      
-      check_is_flashing_or_printing(proc, n_samples) -- proc is self here
       check_next_proc(r:nth_plugin(i+1))
-      
     end
     i = i + 1
   end
+end
+
+
+-- https://github.com/Ardour/ardour/blob/master/share/scripts/_rawmidi.lua
+function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
+  ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
+  
+  check_self()
   
   samples_since_last_draw = samples_since_last_draw + n_samples
   if samples_since_last_draw > samples_per_draw then
     samples_since_last_draw = samples_since_last_draw % samples_per_draw
---     if not (last_id == ctrl[1]) or not (last_valid == valid) then
-      self:queue_draw()
---     end
-    last_id = ctrl[1]
-    last_valid = valid
+    self:queue_draw()
   end
 end
 
@@ -213,24 +208,31 @@ function hsv_to_rgb(h)
 end
 
 
-local txt = nil -- cache font description (in GUI context)
+local txt_large = nil -- cache font description (in GUI context)
+local txt_small = nil
 
 function render_inline(ctx, w, max_h)
   local ctrl = CtrlPorts:array() -- control port array
   local shmem = self:shmem() -- shared memory region
   local state = shmem:to_float(0):array() -- cast to lua-table
+  local display_string = read_string_from_memory()
   
   -- prepare text rendering
-  if not txt then
+  if not txt_large then
     -- allocate PangoLayout and set font
     --http://manual.ardour.org/lua-scripting/class_reference/#Cairo:PangoLayout
-    txt = Cairo.PangoLayout (ctx, "Mono 12px")
+    txt_large = Cairo.PangoLayout (ctx, "Mono 16px")
+    txt_small = Cairo.PangoLayout (ctx, "Mono 10px")
   end  
   
-  txt:set_text(string.format("%d", ctrl[1]));
-  local tw, th = txt:get_pixel_size()
---   local h = w/2
-  local h = th
+  txt_large:set_text(string.format("%d", ctrl[1]));
+  local twl, thl = txt_large:get_pixel_size()
+  
+  txt_small:set_text(string.format("%s", display_string));
+  local tws, ths = txt_small:get_pixel_size()
+  
+
+  local h = thl + ths
   
   -- clear background
   r, g, b = 0.1, 0.1, 0.1
@@ -248,8 +250,11 @@ function render_inline(ctx, w, max_h)
   ctx:fill()
   
   ctx:set_source_rgba(1, 1, 1, 1.0)
-  ctx:move_to(5*w/8 - tw/2, h/2 - th/2)
-  txt:show_in_cairo_context(ctx)
+  ctx:move_to(w/4 + 2, 0)
+  txt_large:show_in_cairo_context(ctx)
+  
+  ctx:move_to(w/4 + 2, thl)
+  txt_small:show_in_cairo_context(ctx)
   
   return {w, h}
 end

@@ -13,9 +13,9 @@ Before describing how it all works, here is a quick demo video of constructing a
 
 As it stands currently, the "plugin" consists of two pieces of lua code, one being the Morph Locator that targets a desired plugin on a track, and the second being the Morph Controller that does all of the parameter automation.
 
-1.  morph_locator.lua is an incredibly simple dsp processor that has exactly one parameter: locator_ID.  This plugin needs to be placed in a track immediately before the desired target plugin.  Manually ensure that every Morph Locator has a unique locator_ID set.  (But note that multiple Morph Controllers can target the same Morph Locator.)  It also has a "button" called Press to Describe that will print the enumerated parameter list of the desired target plugin to the log.  
+1.  morph_locator.lua is an incredibly simple dsp processor that has exactly one parameter: locator_ID.  This plugin needs to be placed in a track immediately before the desired target plugin.  Manually ensure that every Morph Locator has a unique locator_ID set.  (But note that multiple Morph Controllers can target the same Morph Locator.)  
 
-Note that Press to Describe needs a new version of Ardour (7.2-128-g7e4bb2ff68 or later) in order for its messages to be printed successfully.  https://tracker.ardour.org/view.php?id=9202
+The Morph Locator's inline UI displays its own Locator ID as well as the target's parameter number of the last parameter that was modified.  These two numbers correspond to the pid and nth entries needed in a Morph Controller.
 
 2.  morph_controller.lua has a large number of parameters.  
 
@@ -101,16 +101,12 @@ Demo of exporting a session.  (No audio.)
 [![](https://img.youtube.com/vi/yrHkwRv3eDk/0.jpg)](https://youtu.be/yrHkwRv3eDk "Morph Controller (ver2) for Ardour -- Export Demonstration")
 
 
-Demo of Press to Describe.  (No audio.)
-
-[![](https://img.youtube.com/vi/tiKa0oby4xU/0.jpg)](https://youtu.be/tiKa0oby4xU "Morph Controller (ver2) for Ardour -- Demonstration of Press to Describe")
-
-
 Demo of Audio Input.  (Audio starts immediately.)
 
 [![](https://img.youtube.com/vi/7RXJHe8YjVM/0.jpg)](https://youtu.be/7RXJHe8YjVM "Morph Controller (ver2) for Ardour -- Audio Input")
 
 Demo of Audio Input modulating LFO Speed.  (Audio starts immediately.)
+
 [![](https://img.youtube.com/vi/lLiOCMRXTqY/0.jpg)](https://youtu.be/lLiOCMRXTqY "Morph Controller (ver2) for Ardour -- LFO Speed controlled by Guitar Audio Input")
 
 
