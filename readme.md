@@ -15,7 +15,9 @@ As it stands currently, the "plugin" consists of two pieces of lua code, one bei
 
 1.  morph_locator.lua is an incredibly simple dsp processor that has exactly one parameter: locator_ID.  This plugin needs to be placed in a track immediately before the desired target plugin.  Manually ensure that every Morph Locator has a unique locator_ID set.  (But note that multiple Morph Controllers can target the same Morph Locator.)  
 
-The Morph Locator's inline UI displays its own Locator ID as well as the target's parameter number of the last parameter that was modified.  These two numbers correspond to the pid and nth entries needed in a Morph Controller.
+The Morph Locator's inline UI displays its own Locator ID as well as the target's parameter number of the last parameter that was modified.  These two numbers correspond to the pid and nth entries needed in a Morph Controller.  
+![2023_01_30_morph_locator_touch](https://user-images.githubusercontent.com/23608928/215411098-73f94d7c-64e9-404b-86e7-2324500ab061.gif)
+
 
 2.  morph_controller.lua has a large number of parameters.  
 
