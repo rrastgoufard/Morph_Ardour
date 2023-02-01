@@ -614,12 +614,53 @@ function do_the_audio(bufs, in_map, n_samples, offset, verbose)
   end
 end
 
-n_iter = 0
+local self_id = nil
+local wait_cycles = 999999
+local cycles_waited = 0
+local finished_waiting = false
+local max_wait_seconds = 3
+function randomly_wait_a_bit_at_startup(n_samples, verbose)
+  if finished_waiting then
+    return false
+  end
+  local wait_more = false
+  if not self_id then
+  
+    -- hopefully this will stagger the startups of these processors
+    -- so that Ardour isn't bogged down and overwhelmed when opening the project
+    self_id = tonumber(self:id():to_s())
+    local max_wait_cycles = sample_rate / n_samples * max_wait_seconds
+    local waiting_percent = math.random(1, 100) / 100
+    wait_cycles = waiting_percent * max_wait_cycles
+    if verbose then
+      print(string.format(
+        "Hi!  I am %s with id=%s.  Waiting %.0f cycles (%.2f sec) to start up.", 
+        self:name(), 
+        self_id, 
+        wait_cycles, 
+        waiting_percent*max_wait_seconds
+      ))
+    end
+  end
+  if cycles_waited < wait_cycles then
+    cycles_waited = cycles_waited + 1
+    wait_more = true
+  else
+    finished_waiting = true
+    if verbose then
+      print(self_id, "is done waiting!")
+    end
+  end
+  return wait_more
+end
 
 -- https://github.com/Ardour/ardour/blob/master/share/scripts/_rawmidi.lua
 function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
-  n_iter = n_iter + 1
   ARDOUR.DSP.process_map (bufs, n_out, in_map, out_map, n_samples, offset)
+  
+  if randomly_wait_a_bit_at_startup(n_samples, false) then
+    return
+  end
   
   if not Session:transport_rolling() or not self_proc then
     find_targets()
