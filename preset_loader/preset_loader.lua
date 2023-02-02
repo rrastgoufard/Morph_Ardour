@@ -8,6 +8,16 @@ ardour {
   description = [[Preset Loader, to be coupled with Preset Locators placed in tracks.]]
 }
 
+--[[
+
+This is completely undocumented, but see this post on the forums for motivation.
+https://discourse.ardour.org/t/ardour-for-live-performance-with-surge-xt/108257/2
+
+Also, look at the sample script for implementation help.
+https://github.com/Ardour/ardour/blob/master/share/scripts/s_pluginutils.lua
+
+]]
+
 function factory ()   
 
   -- keep track of the last preset for every processor
