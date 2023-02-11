@@ -113,6 +113,9 @@ Demo of Audio Input modulating LFO Speed.  (Audio starts immediately.)
 
 [![](https://img.youtube.com/vi/lLiOCMRXTqY/0.jpg)](https://youtu.be/lLiOCMRXTqY "Morph Controller (ver2) for Ardour -- LFO Speed controlled by Guitar Audio Input")
 
+Demo of Zero Crossing counter.  (Audio is INCREDIBLY LOUD)
+[![](https://img.youtube.com/vi/JgNGnTziygM/0.jpg)](https://youtu.be/JgNGnTziygM "Morph Controller (ver2) for Ardour -- Zero Crossings for Pitch-Dependent Effects")
+
 
 ## Inspirations
 
