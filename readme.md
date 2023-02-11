@@ -25,7 +25,7 @@ Controller: the controller value that slides between 0 and 1.
 
 Visualize: choose to visualize an overview of all target outputs by setting to -1, or choose a specific target by setting in the range of 0 to 7.
 
-Control Mode: choose one of Manual, Use LFO, or Audio Input.  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
+Control Mode: choose one of Manual, Use LFO, Audio Input, or Zero Crossings.  When set to Zero Crossings, the Controller's value is proportional to the number of zero crossings.  (This is a crude method of frequency tracking.)  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
 
 lfo shape: choose between sine and saw
 
@@ -44,6 +44,8 @@ lfo reset: set to 0 for enabling the LFO to run, and set to 1 to force the LFO t
 audio +smooth: time constant for smoothing out changes that increase the Controller's value.  Lower gives faster response.
 
 audio -smooth: time constant for smoothing out changes that decrease the Controller's value.  Lower gives faster response.
+
+zx power: proportionality constant for scaling the number of zero crossings.  The number of counted crossings is divided by 2^zx_power to get the Controller's value between 0 and 1.
 
 The remaining 14 parameters are replicated once for each of 8 targets.  
 

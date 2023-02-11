@@ -104,6 +104,7 @@ function dsp_params()
     ["Manual"] = 0,
     ["Use LFO"] = 1,
     ["Audio Input"] = 2,
+    ["Zero Crossings"] = 3,
   }})
   
   add_param(output,  { ["type"] = "input", name = "lfo shape", min = 0, max = 1, default = 0, enum = true, scalepoints = { ["sine"] = 0, ["saw"] = 1} })
@@ -124,6 +125,8 @@ function dsp_params()
   
   add_param(output,  { ["type"] = "input", name = "audio +smooth", min = 0, max = 1, default = 0 })
   add_param(output,  { ["type"] = "input", name = "audio -smooth", min = 0, max = 1, default = 0 })
+  
+  add_param(output,  { ["type"] = "input", name = "zx power", min = 0, max = 10, default = 5, integer = true })
   
   
   for i=0, MAX_TARGETS-1 do
@@ -614,6 +617,52 @@ function do_the_audio(bufs, in_map, n_samples, offset, verbose)
   end
 end
 
+
+
+-- monitor incoming audio and allow setting the Controller's value based on the number of zero crossings
+
+local zx_prev_val = 0
+local zx_count = 0
+
+function do_the_zx(bufs, in_map, n_samples, offset, verbose)
+  local ctrl = CtrlPorts:array()
+  local control_mode = ctrl[CTRL_IDX["Control Mode"]]
+  local use_zx = control_mode > 2.5 and control_mode < 3.5
+  local zx_power = ctrl[CTRL_IDX["zx power"]]
+  if not use_zx then return end
+  if n_audio <= 0 then return end -- n_audio is a global parameter
+  
+  if verbose then
+    print("Using Zero Crossings as Control Mode")
+    print(n_audio, n_samples)
+  end
+  
+  local ib = in_map:get(ARDOUR.DataType("audio"), 0)
+  if verbose then
+    print("Got input buffer channel 0 ID", ib)
+  end
+  
+  
+  local buf = bufs:get_audio(ib):data(offset):array()
+  local val
+  for s = 1, n_samples do
+    val = buf[s]
+    if val*zx_prev_val < 0 then
+      zx_count = zx_count + 1
+    end
+    zx_prev_val = val
+  end
+  
+  local powered = 2^zx_power
+  local zx_ratio = zx_count / powered
+  if verbose then
+    print("current zx_count", zx_count, zx_ratio)
+  end
+  zx_count = zx_count % powered
+  
+  ARDOUR.LuaAPI.set_processor_param(self_proc, 0, zx_ratio)
+end
+
 local self_id = nil
 local wait_cycles = 999999
 local cycles_waited = 0
@@ -668,6 +717,7 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
   
   do_the_lfo(n_samples, false)
   do_the_audio(bufs, in_map, n_samples, offset, false)
+  do_the_zx(bufs, in_map, n_samples, offset, false)
   do_the_morph(false)
   
   samples_since_draw = samples_since_draw + n_samples
