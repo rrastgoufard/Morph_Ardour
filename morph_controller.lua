@@ -126,8 +126,12 @@ function dsp_params()
   add_param(output,  { ["type"] = "input", name = "audio +smooth", min = 0, max = 1, default = 0 })
   add_param(output,  { ["type"] = "input", name = "audio -smooth", min = 0, max = 1, default = 0 })
   
-  add_param(output,  { ["type"] = "input", name = "zx power", min = 0, max = 10, default = 5, integer = true })
-  
+--   add_param(output,  { ["type"] = "input", name = "zx min (Hz)", min = 1, max = 1000, default = 50, logarithmic = true })
+--   add_param(output,  { ["type"] = "input", name = "zx max (Hz)", min = 1, max = 1000, default = 500, logarithmic = true })
+  add_param(output,  { ["type"] = "input", name = "zx thresh", min = 0, max = 1, default = 0.025 })
+  add_param(output,  { ["type"] = "input", name = "zx max (Hz)", min = 10, max = 8000, default = 1000, logarithmic = true })
+  add_param(output,  { ["type"] = "input", name = "zx +smooth", min = 0, max = 1, default = 0.1 })
+  add_param(output,  { ["type"] = "input", name = "zx -smooth", min = 0, max = 1, default = 0.99 })
   
   for i=0, MAX_TARGETS-1 do
     add_param(output, { ["type"] = "input", name = "t" .. i .. "_ct", min = 2, max = 10, default = 2, integer = true })  -- how many points to use for control.  0 means disabled
@@ -622,13 +626,20 @@ end
 -- monitor incoming audio and allow setting the Controller's value based on the number of zero crossings
 
 local zx_prev_val = 0
-local zx_count = 0
+local zx_zero_freq = 0
+local zx_samples_since_last_crossing = 1
 
 function do_the_zx(bufs, in_map, n_samples, offset, verbose)
   local ctrl = CtrlPorts:array()
   local control_mode = ctrl[CTRL_IDX["Control Mode"]]
   local use_zx = control_mode > 2.5 and control_mode < 3.5
-  local zx_power = ctrl[CTRL_IDX["zx power"]]
+--   local zx_min = ctrl[CTRL_IDX["zx min (Hz)"]]
+  local zx_max = ctrl[CTRL_IDX["zx max (Hz)"]]
+  local zx_smooth = ctrl[CTRL_IDX["zx +smooth"]]
+  local zx_smooth_minus = ctrl[CTRL_IDX["zx -smooth"]]
+  local zx_thresh = ctrl[CTRL_IDX["zx thresh"]]
+  local zx_min = 1
+  local zx_smooth_decay = zx_smooth_minus
   if not use_zx then return end
   if n_audio <= 0 then return end -- n_audio is a global parameter
   
@@ -643,23 +654,47 @@ function do_the_zx(bufs, in_map, n_samples, offset, verbose)
   end
   
   
-  local buf = bufs:get_audio(ib):data(offset):array()
+  local fullbuf = bufs:get_audio(ib):data(offset)
+  local buf = fullbuf:array()
   local val
-  for s = 1, n_samples do
-    val = buf[s]
-    if val*zx_prev_val < 0 then
-      zx_count = zx_count + 1
+  
+  local peak = 0
+  local peak = ARDOUR.DSP.compute_peak(fullbuf, n_samples, peak)
+  local strong_enough = peak > zx_thresh
+  local rollback_freq = zx_zero_freq
+  if strong_enough then
+    for s = 1, n_samples do
+      val = buf[s]
+      if val*zx_prev_val >= 0 then
+        zx_samples_since_last_crossing = zx_samples_since_last_crossing + 1
+      else
+        -- there are two zero crossings in a cycle of a sine wave, so divide by 2
+        local new_freq = 0.5/(zx_samples_since_last_crossing/sample_rate)
+        local a = zx_smooth
+        zx_zero_freq = a*zx_zero_freq + (1-a)*new_freq
+        
+        if zx_zero_freq >= zx_max then
+          zx_zero_freq = rollback_freq
+        else
+          zx_samples_since_last_crossing = 1
+        end
+      end
+      zx_prev_val = val
     end
-    zx_prev_val = val
   end
   
-  local powered = 2^zx_power
-  local zx_ratio = zx_count / powered
+  -- if the signal level is not larger than zx_thresh, then assume freq is zero and decay towards it
+  if not strong_enough then
+    zx_zero_freq = zx_smooth_decay * zx_zero_freq
+  end
+  
+--   local powered = 2^zx_power
+--   local zx_ratio = zx_count / powered
   if verbose then
-    print("current zx_count", zx_count, zx_ratio)
+    print("current zx_freq", zx_zero_freq)
   end
-  zx_count = zx_count % powered
-  
+  zx_zero_freq = math.max(math.min(zx_zero_freq, zx_max), zx_min)
+  local zx_ratio = (zx_zero_freq - zx_min) / (zx_max - zx_min)
   ARDOUR.LuaAPI.set_processor_param(self_proc, 0, zx_ratio)
 end
 

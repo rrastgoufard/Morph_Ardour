@@ -25,7 +25,7 @@ Controller: the controller value that slides between 0 and 1.
 
 Visualize: choose to visualize an overview of all target outputs by setting to -1, or choose a specific target by setting in the range of 0 to 7.
 
-Control Mode: choose one of Manual, Use LFO, Audio Input, or Zero Crossings.  When set to Zero Crossings, the Controller's value is proportional to the number of zero crossings.  (This is a crude method of frequency tracking.)  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
+Control Mode: choose one of Manual, Use LFO, Audio Input, or Zero Crossings.  When set to Zero Crossings, the Controller's value is proportional to the detected frequency of the input audio, as detected by the number of zero crossings.  (This is a crude method of frequency tracking.)  When set to Audio Input, the peak level of the input (clipped to the range 0 to 1) will determine the Controller's value.  When set to Use LFO, the following parameters LFO parameters will take effect.
 
 lfo shape: choose between sine and saw
 
@@ -45,7 +45,13 @@ audio +smooth: time constant for smoothing out changes that increase the Control
 
 audio -smooth: time constant for smoothing out changes that decrease the Controller's value.  Lower gives faster response.
 
-zx power: proportionality constant for scaling the number of zero crossings.  The number of counted crossings is divided by 2^zx_power to get the Controller's value between 0 and 1.
+zx thresh: the level of the signal above which zero crossings are counted.  This is largely in place to prevent the noise floor from causing havoc on the frequency reading.
+
+zx max (Hz): the maximum frequency to detect.  This is used to scale the Controller's value.
+
+zx +smooth: when above the threshold zx thresh, this parameter determines how quickly the frequency reading is allowed to change.
+
+zx -smooth: when below the threshold zx thresh, the reported frequency is designed to be zero, and this parameter determines how quickly the Controller's value is allowed to decay down to zero.  
 
 The remaining 14 parameters are replicated once for each of 8 targets.  
 
