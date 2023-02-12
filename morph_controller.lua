@@ -675,9 +675,8 @@ function do_the_zx(bufs, in_map, n_samples, offset, verbose)
         
         if zx_zero_freq >= zx_max then
           zx_zero_freq = rollback_freq
-        else
-          zx_samples_since_last_crossing = 1
         end
+        zx_samples_since_last_crossing = 1
       end
       zx_prev_val = val
     end
