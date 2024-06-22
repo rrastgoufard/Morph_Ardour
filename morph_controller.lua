@@ -804,6 +804,11 @@ function draw_target(t, tx, ty, w, h, ctx, txt, ctrl, state)
   local enabled = state[start_shmem + 9] > 0.5
   local target_exists = state[start_shmem + 10] > 0.5
   
+--   Do a quick check to make sure we have a valid
+--   target Locator.
+  if ctrl_pid <= 0 then
+    return
+  end
   local plugin_id = math.floor(ctrl[ctrl_pid])
   
   txt:set_text(string.format("%d", plugin_id));
@@ -893,6 +898,11 @@ function visualize_single(t, w, h, ctx, txt, ctrl, state)
   local target_exists = state[start_shmem + 10] > 0.5
   local ctrl_skew = state[start_shmem + 11]
   
+--   Do a quick check to make sure we have a valid
+--   target Locator.
+  if ctrl_pid <= 0 then
+    return
+  end  
   local plugin_id = math.floor(ctrl[ctrl_pid])
   local r,g,b = 1, 1, 1
   local padH = 5
